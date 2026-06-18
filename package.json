@@ -1,0 +1,8 @@
+{
+  "name": "cordovatest",
+  "version": "1.0.0",
+  "description": "A minimal Cordova app",
+  "devDependencies": {
+    "cordova-android": "^13.0.0"
+  }
+}
