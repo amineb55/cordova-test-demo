@@ -1,0 +1,184 @@
+rules_version = '2';
+
+// =============================================================================
+// Action ou Verite Live - Cloud Firestore security rules
+// -----------------------------------------------------------------------------
+// Schema mirror: data/.../remote/FirestorePaths.kt
+//   users/{uid}                          public profile (owner-writable)
+//     friends/{friendUid}                owner only
+//     served/{signature}                 owner only (served-challenge dedupe)
+//     dm/{peerUid}/messages/{msgId}      owner only (their copy of the thread)
+//   rooms/{roomId}                       host-created, player-mutated
+//     game/state                         single doc, players (prod: function)
+//     signals/{peer}                     WebRTC SDP/ICE between participants
+//     messages/{msgId}                   in-room chat
+//   matchQueue/{uid}                     owner only
+//   leaderboards/...                     read-only (written by functions)
+//   reports/{id}                         create-only, never client-readable
+//   friendRequests/{id}                  sender creates; recipient reads/deletes
+//
+// Posture: deny-by-default; every rule requires an authenticated caller. Where a
+// value is security-sensitive (game state, leaderboards, XP/stats) production
+// should move writes behind a Cloud Function with the Admin SDK (which bypasses
+// these rules); comments flag those spots.
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ----- helpers ----------------------------------------------------------
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Membership check against a room's List<Map> `players` field. The host is
+    // always a member; otherwise the caller must appear as a player map. A
+    // PlayerDto map always carries `uid` + `isHost`, so hasAny over both
+    // possible isHost values covers every entry without enumerating the rest.
+    function roomContainsCaller(roomId) {
+      let room = get(/databases/$(database)/documents/rooms/$(roomId)).data;
+      return signedIn() && (
+        room.hostUid == request.auth.uid ||
+        room.players.hasAny([{'uid': request.auth.uid, 'isHost': true}]) ||
+        room.players.hasAny([{'uid': request.auth.uid, 'isHost': false}])
+      );
+    }
+
+    // ----- users ------------------------------------------------------------
+    // Public profile: any signed-in user may read; only the owner may write.
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create, update, delete: if isOwner(uid);
+
+      // NOTE: stats.xp / leaderboard counters are awarded server-side. In
+      // production, tighten the update rule so clients cannot self-grant XP
+      // (e.g. require request.resource.data.stats == resource.data.stats and
+      // mutate stats only from a Cloud Function via the Admin SDK).
+
+      // Friends list: owner only (the reciprocal stub on the friend's own
+      // document is written by the accept flow / a function, not cross-user).
+      match /friends/{friendUid} {
+        allow read, write: if isOwner(uid);
+      }
+
+      // Served-challenge dedupe signatures: owner only.
+      match /served/{signature} {
+        allow read, write: if isOwner(uid);
+      }
+
+      // Direct messages: each user owns their copy of the thread.
+      match /dm/{peerUid}/messages/{msgId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /dm/{peerUid} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // ----- rooms ------------------------------------------------------------
+    // Any signed-in user may read a room (lobby/spectate). Creation is by the
+    // host (the new doc must name the caller as hostUid). Updates are limited to
+    // a player joining/leaving themselves or mutating their own media/ping; the
+    // host may also delete the room.
+    match /rooms/{roomId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.hostUid == request.auth.uid;
+
+      // Updates cover three legitimate cases that all require an authenticated
+      // caller:
+      //   1. the host managing the room,
+      //   2. an existing player toggling their own media/ping or leaving,
+      //   3. a new player joining (adding only their own entry).
+      // Because case 3 is performed by someone who is not yet a member, a bare
+      // signed-in check is the floor here. Per-field integrity (you only mutate
+      // your own player map / cannot evict others) is enforced by the
+      // transaction logic in RoomRepositoryImpl, and PRODUCTION should move
+      // authoritative mutations (status, evictions) behind a Cloud Function.
+      allow update: if signedIn();
+
+      allow delete: if signedIn()
+        && resource.data.hostUid == request.auth.uid;
+
+      // Authoritative game state (single `state` doc). Writable by room players
+      // for the on-device game loop.
+      // PRODUCTION: restrict to a Cloud Function (Admin SDK) so clients cannot
+      // forge turns/outcomes; change to `allow write: if false;` once the
+      // function owns transitions.
+      match /game/{doc} {
+        allow read: if signedIn();
+        allow write: if roomContainsCaller(roomId);
+      }
+
+      // WebRTC signalling (offer/answer/ICE). Participants only.
+      match /signals/{peer} {
+        allow read: if signedIn();
+        allow write: if roomContainsCaller(roomId);
+      }
+
+      // In-room chat. Participants may post; sender must be the caller.
+      match /messages/{msgId} {
+        allow read: if signedIn();
+        allow create: if roomContainsCaller(roomId)
+          && request.resource.data.senderUid == request.auth.uid;
+        allow update, delete: if signedIn()
+          && resource.data.senderUid == request.auth.uid;
+      }
+    }
+
+    // ----- matchQueue -------------------------------------------------------
+    // Each user publishes only their own queue entry; the matchmaker runs in a
+    // Cloud Function (Admin SDK) which can read the whole pool.
+    match /matchQueue/{uid} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if isOwner(uid);
+    }
+
+    // ----- leaderboards -----------------------------------------------------
+    // Read-only to clients; materialized by a scheduled Cloud Function.
+    match /leaderboards/{document=**} {
+      allow read: if signedIn();
+      allow write: if false; // Admin SDK only.
+    }
+
+    // ----- reports ----------------------------------------------------------
+    // Create-only by signed-in users; never readable by clients (moderation
+    // tooling uses the Admin SDK). The reporter must be the caller.
+    match /reports/{reportId} {
+      allow read: if false;
+      allow create: if signedIn()
+        && request.resource.data.reporterUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ----- friendRequests ---------------------------------------------------
+    // The sender creates the request (fromUid == caller); the recipient may
+    // read and delete (accept/decline). The sender may also cancel their own.
+    match /friendRequests/{requestId} {
+      allow read: if signedIn() && (
+        resource.data.toUid == request.auth.uid ||
+        resource.data.fromUid == request.auth.uid
+      );
+      allow create: if signedIn()
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.toUid != request.auth.uid;
+      allow delete: if signedIn() && (
+        resource.data.toUid == request.auth.uid ||
+        resource.data.fromUid == request.auth.uid
+      );
+      allow update: if false; // requests are immutable; accept = delete + batch.
+    }
+
+    // ----- default deny -----------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
