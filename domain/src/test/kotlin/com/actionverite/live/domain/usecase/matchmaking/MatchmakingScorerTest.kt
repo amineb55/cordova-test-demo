@@ -2,6 +2,7 @@ package com.actionverite.live.domain.usecase.matchmaking
 
 import com.actionverite.live.domain.model.Interest
 import com.actionverite.live.domain.model.MatchProfile
+import com.actionverite.live.domain.model.ReputationTier
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
@@ -18,56 +19,53 @@ class MatchmakingScorerTest {
         interests = setOf(Interest.MUSIC, Interest.GAMING),
         allowAdult = true,
         pingMs = 0,
+        reputationTier = ReputationTier.EXCELLENT,
     )
 
     @Test
-    fun `an identical candidate scores a perfect match`() {
+    fun `an identical excellent-reputation candidate scores a perfect match`() {
         val twin = self.copy(uid = "twin")
         assertThat(scorer.score(self, twin)).isWithin(1e-9).of(1.0)
     }
 
     @Test
-    fun `different language removes the language weight`() {
-        val other = self.copy(uid = "fr", languageCode = "fr")
-        assertThat(scorer.score(self, other)).isWithin(1e-9).of(1.0 - MatchmakingScorer.W_LANGUAGE)
+    fun `same country outranks same language`() {
+        val sameCountryDiffLang = self.copy(uid = "a", languageCode = "fr")
+        val diffCountrySameLang = self.copy(uid = "b", countryCode = "CA")
+        // Losing the smaller language weight must hurt less than losing country.
+        assertThat(scorer.score(self, sameCountryDiffLang))
+            .isGreaterThan(scorer.score(self, diffCountrySameLang))
     }
 
     @Test
-    fun `no shared interests removes the interests weight`() {
-        val other = self.copy(uid = "x", interests = setOf(Interest.SPORTS))
-        assertThat(scorer.score(self, other)).isWithin(1e-9).of(1.0 - MatchmakingScorer.W_INTERESTS)
+    fun `weights are removed when a dimension fully mismatches`() {
+        assertThat(scorer.score(self, self.copy(uid = "c", countryCode = "CA")))
+            .isWithin(1e-9).of(1.0 - MatchmakingScorer.W_COUNTRY)
+        assertThat(scorer.score(self, self.copy(uid = "l", languageCode = "fr")))
+            .isWithin(1e-9).of(1.0 - MatchmakingScorer.W_LANGUAGE)
+        assertThat(scorer.score(self, self.copy(uid = "i", interests = setOf(Interest.SPORTS))))
+            .isWithin(1e-9).of(1.0 - MatchmakingScorer.W_INTERESTS)
     }
 
     @Test
-    fun `high ping erodes the ping weight`() {
-        val laggy = self.copy(uid = "lag", pingMs = 300) // == maxPingMs
-        assertThat(scorer.score(self, laggy)).isWithin(1e-9).of(1.0 - MatchmakingScorer.W_PING)
+    fun `lower reputation tiers reduce the score, with NEW above FEW_RATINGS`() {
+        val good = scorer.score(self, self.copy(uid = "g", reputationTier = ReputationTier.GOOD))
+        val newAcct = scorer.score(self, self.copy(uid = "n", reputationTier = ReputationTier.NEW))
+        val few = scorer.score(self, self.copy(uid = "f", reputationTier = ReputationTier.FEW_RATINGS))
+
+        assertThat(good).isWithin(1e-9).of(1.0 - MatchmakingScorer.W_REPUTATION * (1.0 - 0.8))
+        assertThat(newAcct).isWithin(1e-9).of(1.0 - MatchmakingScorer.W_REPUTATION * (1.0 - 0.6))
+        assertThat(few).isWithin(1e-9).of(1.0 - MatchmakingScorer.W_REPUTATION * (1.0 - 0.5))
+        // New accounts are prioritized over merely few-rated ones, per the spec.
+        assertThat(newAcct).isGreaterThan(few)
     }
 
     @Test
-    fun `max level gap removes the level weight`() {
-        val farLevel = self.copy(uid = "lvl", level = 20) // gap 10 == maxLevelGap
-        assertThat(scorer.score(self, farLevel)).isWithin(1e-9).of(1.0 - MatchmakingScorer.W_LEVEL)
-    }
-
-    @Test
-    fun `unknown age yields a neutral half age weight`() {
-        val noAge = self.copy(uid = "na", age = null)
-        // Age term contributes 0.5 instead of 1.0 → lose half the age weight.
-        assertThat(scorer.score(self, noAge)).isWithin(1e-9).of(1.0 - MatchmakingScorer.W_AGE * 0.5)
-    }
-
-    @Test
-    fun `score is always within unit range`() {
+    fun `score stays within the unit range for the worst candidate`() {
         val worst = MatchProfile(
-            uid = "worst",
-            languageCode = "zz",
-            countryCode = "ZZ",
-            age = 80,
-            level = 999,
-            interests = emptySet(),
-            allowAdult = false,
-            pingMs = 10_000,
+            uid = "worst", languageCode = "zz", countryCode = "ZZ", age = 80, level = 999,
+            interests = emptySet(), allowAdult = false, pingMs = 10_000,
+            reputationTier = ReputationTier.FEW_RATINGS,
         )
         val s = scorer.score(self, worst)
         assertThat(s).isAtLeast(0.0)

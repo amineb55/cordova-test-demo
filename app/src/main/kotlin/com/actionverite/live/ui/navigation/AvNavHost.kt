@@ -15,7 +15,9 @@ import com.actionverite.live.feature.leaderboard.LeaderboardRoute
 import com.actionverite.live.feature.matchmaking.MatchmakingRoute
 import com.actionverite.live.feature.onboarding.OnboardingRoute
 import com.actionverite.live.feature.profile.ProfileRoute
+import com.actionverite.live.feature.rating.RatingRoute
 import com.actionverite.live.feature.settings.SettingsRoute
+import com.actionverite.live.feature.wallet.WalletRoute
 
 /**
  * The single navigation graph. Each feature exposes one entry composable
@@ -61,6 +63,7 @@ fun AvNavHost(
                 onOpenFriends = { navController.navigate(Destinations.FRIENDS) },
                 onOpenLeaderboard = { navController.navigate(Destinations.LEADERBOARD) },
                 onOpenProfile = { navController.navigate(Destinations.PROFILE) },
+                onOpenWallet = { navController.navigate(Destinations.WALLET) },
             )
         }
 
@@ -82,9 +85,10 @@ fun AvNavHost(
             val roomId = entry.arguments?.getString(Destinations.ARG_ROOM_ID).orEmpty()
             GameRoute(
                 roomId = roomId,
+                // On leaving a game, route through the post-game rating screen.
                 onLeave = {
-                    navController.navigate(Destinations.HOME) {
-                        popUpTo(Destinations.HOME) { inclusive = true }
+                    navController.navigate(Destinations.rating(roomId)) {
+                        popUpTo(Destinations.GAME) { inclusive = true }
                     }
                 },
             )
@@ -112,6 +116,25 @@ fun AvNavHost(
 
         composable(Destinations.SETTINGS) {
             SettingsRoute(onBack = { navController.popBackStack() })
+        }
+
+        composable(Destinations.WALLET) {
+            WalletRoute(onBack = { navController.popBackStack() })
+        }
+
+        composable(
+            route = Destinations.RATING,
+            arguments = listOf(navArgument(Destinations.ARG_ROOM_ID) { type = NavType.StringType }),
+        ) { entry ->
+            val roomId = entry.arguments?.getString(Destinations.ARG_ROOM_ID).orEmpty()
+            RatingRoute(
+                roomId = roomId,
+                onDone = {
+                    navController.navigate(Destinations.HOME) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+            )
         }
     }
 }

@@ -3,18 +3,16 @@
  *
  * Reads the `matchQueue` collection (documents written by the Android client's
  * `MatchmakingRepositoryImpl.toQueueMap`), scores every candidate against the
- * seeker with the SAME weighted formula as the on-device `MatchmakingScorer`,
- * greedily forms a group of up to `desiredSize`, writes a `rooms` document the
- * client can deserialize into `RoomDto`, and removes the matched players from
- * the queue. Returns `{ roomId }` (or `{ roomId: null }` while still searching).
+ * seeker with the SAME weighted formula as the on-device `MatchmakingScorer`
+ * (same country is the top priority, then language, interests, reputation…),
+ * greedily forms a gender-balanced group of up to `desiredSize`, writes a `rooms`
+ * document the client can deserialize into `RoomDto`, and removes the matched
+ * players from the queue. Returns `{ roomId }` (or null while still searching).
  *
  * Simplifications (documented intentionally):
- *  - No global optimization; a greedy top-N selection around the seeker is
- *    sufficient for the pool sizes this game sees and keeps the call cheap.
- *  - Concurrency is handled with a Firestore transaction over the chosen docs;
- *    if a candidate was claimed by a parallel match it is dropped and the group
- *    may end up smaller (still >= MIN_PLAYERS or we return null).
- *  - `pingMs` is read straight from the queue doc (client-measured).
+ *  - Greedy top-N selection around the seeker, not global optimization.
+ *  - Gender balancing is best-effort ("équilibrer hommes/femmes lorsque possible").
+ *  - Concurrency handled via a Firestore transaction over the chosen docs.
  */
 
 import * as admin from "firebase-admin";
@@ -22,19 +20,22 @@ import { randomUUID } from "crypto";
 import {
   COLLECTION_MATCH_QUEUE,
   COLLECTION_ROOMS,
+  Gender,
   Interest,
+  ReputationTier,
   RequestMatchInput,
   ROOM_MAX_PLAYERS,
   ROOM_MIN_PLAYERS,
 } from "./types";
 
 /** Scorer weights — must stay identical to `MatchmakingScorer` (domain). */
-const W_LANGUAGE = 0.3;
-const W_INTERESTS = 0.25;
-const W_LEVEL = 0.15;
-const W_AGE = 0.1;
-const W_COUNTRY = 0.1;
-const W_PING = 0.1;
+const W_COUNTRY = 0.3;
+const W_LANGUAGE = 0.22;
+const W_INTERESTS = 0.18;
+const W_REPUTATION = 0.12;
+const W_LEVEL = 0.08;
+const W_AGE = 0.05;
+const W_PING = 0.05;
 
 /** Default gap/ping bounds — mirror `MatchPreferences` defaults. */
 const MAX_LEVEL_GAP = 10;
@@ -52,6 +53,8 @@ interface QueueEntry {
   allowAdult: boolean;
   pingMs: number;
   desiredSize: number;
+  gender: Gender;
+  reputationTier: ReputationTier;
 }
 
 function parseEntry(
@@ -61,6 +64,8 @@ function parseEntry(
   const uid = (data.uid as string | undefined) ?? doc.id;
   if (typeof uid !== "string" || uid.length === 0) return null;
   const rawInterests = Array.isArray(data.interests) ? data.interests : [];
+  const gender = (data.gender as Gender) ?? "UNSPECIFIED";
+  const reputationTier = (data.reputationTier as ReputationTier) ?? "NEW";
   return {
     uid,
     languageCode: (data.languageCode as string) ?? "en",
@@ -73,9 +78,9 @@ function parseEntry(
     allowAdult: data.allowAdult === true,
     pingMs: typeof data.pingMs === "number" ? data.pingMs : 0,
     desiredSize:
-      typeof data.desiredSize === "number"
-        ? data.desiredSize
-        : ROOM_MIN_PLAYERS,
+      typeof data.desiredSize === "number" ? data.desiredSize : ROOM_MIN_PLAYERS,
+    gender,
+    reputationTier,
   };
 }
 
@@ -100,21 +105,37 @@ function ageScore(selfAge: number | null, candidateAge: number | null): number {
   return proximity(Math.abs(selfAge - candidateAge), MAX_AGE_GAP);
 }
 
+/** Reputation weight — NEW above FEW_RATINGS so new accounts get integrated. */
+function reputationValue(tier: ReputationTier): number {
+  switch (tier) {
+    case "EXCELLENT":
+      return 1.0;
+    case "GOOD":
+      return 0.8;
+    case "NEW":
+      return 0.6;
+    case "FEW_RATINGS":
+      return 0.5;
+  }
+}
+
 /** Compatibility on a 0..1 scale — identical formula to `MatchmakingScorer`. */
 export function score(self: QueueEntry, candidate: QueueEntry): number {
-  const language = self.languageCode === candidate.languageCode ? 1 : 0;
   const country = self.countryCode === candidate.countryCode ? 1 : 0;
+  const language = self.languageCode === candidate.languageCode ? 1 : 0;
   const interests = jaccard(self.interests, candidate.interests);
+  const reputation = reputationValue(candidate.reputationTier);
   const level = proximity(Math.abs(self.level - candidate.level), MAX_LEVEL_GAP);
   const age = ageScore(self.age, candidate.age);
   const ping = 1 - Math.min(1, Math.max(0, candidate.pingMs) / MAX_PING_MS);
 
   const total =
+    W_COUNTRY * country +
     W_LANGUAGE * language +
     W_INTERESTS * interests +
+    W_REPUTATION * reputation +
     W_LEVEL * level +
     W_AGE * age +
-    W_COUNTRY * country +
     W_PING * ping;
   return Math.max(0, Math.min(1, total));
 }
@@ -134,6 +155,37 @@ function passesHardFilters(
   }
   if ((prefs.adultOnly ?? false) && !candidate.allowAdult) return false;
   return true;
+}
+
+/**
+ * Greedy gender-balanced selection of [slots] candidates from a score-sorted
+ * list — mirrors `FormMatchUseCase.selectGenderBalanced`.
+ */
+function selectGenderBalanced(
+  self: QueueEntry,
+  sorted: QueueEntry[],
+  slots: number,
+): QueueEntry[] {
+  if (slots <= 0) return [];
+  const remaining = [...sorted];
+  const chosen: QueueEntry[] = [];
+  let male = self.gender === "MALE" ? 1 : 0;
+  let female = self.gender === "FEMALE" ? 1 : 0;
+
+  while (chosen.length < slots && remaining.length > 0) {
+    const target: Gender | null =
+      male < female ? "MALE" : female < male ? "FEMALE" : null;
+    let index = 0;
+    if (target !== null) {
+      const found = remaining.findIndex((c) => c.gender === target);
+      index = found >= 0 ? found : 0;
+    }
+    const [pick] = remaining.splice(index, 1);
+    chosen.push(pick);
+    if (pick.gender === "MALE") male++;
+    else if (pick.gender === "FEMALE") female++;
+  }
+  return chosen;
 }
 
 /** Builds a `RoomDto`-shaped document from the chosen players. */
@@ -183,17 +235,13 @@ export async function requestMatch(
   const db = admin.firestore();
   const queueRef = db.collection(COLLECTION_MATCH_QUEUE);
 
-  // Bounded snapshot — same 50-doc cap the client uses for its local pool.
   const snapshot = await queueRef.limit(50).get();
   const entries = snapshot.docs
     .map(parseEntry)
     .filter((e): e is QueueEntry => e !== null);
 
   const self = entries.find((e) => e.uid === uid);
-  if (self === undefined) {
-    // Caller isn't in the queue (race with enqueue) — nothing to match yet.
-    return null;
-  }
+  if (self === undefined) return null; // race with enqueue
 
   const desiredSize = Math.min(
     ROOM_MAX_PLAYERS,
@@ -203,37 +251,26 @@ export async function requestMatch(
   const ranked = entries
     .filter((c) => passesHardFilters(self, c, prefs))
     .map((c) => ({ entry: c, s: score(self, c) }))
-    .sort((a, b) => b.s - a.s);
+    .sort((a, b) => (b.s - a.s) || a.entry.uid.localeCompare(b.entry.uid))
+    .map((r) => r.entry);
 
-  // Seeker first, then the best-scoring candidates up to desiredSize.
-  const group: QueueEntry[] = [self];
-  for (const { entry } of ranked) {
-    if (group.length >= desiredSize) break;
-    group.push(entry);
-  }
+  const others = selectGenderBalanced(self, ranked, desiredSize - 1);
+  const group: QueueEntry[] = [self, ...others];
 
-  if (group.length < ROOM_MIN_PLAYERS) {
-    // Not enough compatible players yet — keep the seeker queued.
-    return null;
-  }
+  if (group.length < ROOM_MIN_PLAYERS) return null;
 
   const roomId = randomUUID();
   const roomRef = db.collection(COLLECTION_ROOMS).doc(roomId);
   const memberRefs = group.map((m) => queueRef.doc(m.uid));
 
-  // Claim the chosen players atomically; drop any that vanished mid-flight.
   const committedMembers = await db.runTransaction(async (tx) => {
     const docs = await Promise.all(memberRefs.map((ref) => tx.get(ref)));
     const present: QueueEntry[] = [];
     for (let i = 0; i < docs.length; i++) {
       if (docs[i].exists) present.push(group[i]);
     }
-    if (present.length < ROOM_MIN_PLAYERS) {
-      return [] as QueueEntry[];
-    }
-    const room = buildRoomDoc(roomId, present, self.uid);
-    tx.set(roomRef, room);
-    // Remove matched players from the queue so they aren't re-matched.
+    if (present.length < ROOM_MIN_PLAYERS) return [] as QueueEntry[];
+    tx.set(roomRef, buildRoomDoc(roomId, present, self.uid));
     for (const m of present) tx.delete(queueRef.doc(m.uid));
     return present;
   });

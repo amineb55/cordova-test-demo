@@ -13,6 +13,8 @@ data class MatchProfile(
     val interests: Set<Interest>,
     val allowAdult: Boolean,
     val pingMs: Int = 0,
+    val gender: Gender = Gender.UNSPECIFIED,
+    val reputationTier: ReputationTier = ReputationTier.NEW,
 )
 
 /** Hard filters + soft preferences for a matchmaking search. */
@@ -24,6 +26,7 @@ data class MatchPreferences(
     val maxLevelGap: Int = 10,
     val maxAgeGap: Int = 8,
     val maxPingMs: Int = 300,
+    val balanceGender: Boolean = true,
 ) {
     init {
         require(desiredSize in Room.MIN_PLAYERS..Room.MAX_PLAYERS) {

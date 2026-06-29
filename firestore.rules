@@ -77,6 +77,15 @@ service cloud.firestore {
       match /dm/{peerUid} {
         allow read, write: if isOwner(uid);
       }
+
+      // Gold ledger: read-only to the owner; entries are written only by the
+      // economy Cloud Functions (the Admin SDK bypasses these rules).
+      // PRODUCTION: also restrict updates to users/{uid}.gold and .reputation to
+      // functions only, so balances/reputation can't be self-granted.
+      match /transactions/{txId} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
     }
 
     // ----- rooms ------------------------------------------------------------
@@ -129,6 +138,13 @@ service cloud.firestore {
         allow update, delete: if signedIn()
           && resource.data.senderUid == request.auth.uid;
       }
+
+      // Post-game peer ratings: written only by the submitRatings Cloud Function;
+      // participants may read aggregate ratings for the room.
+      match /ratings/{ratingId} {
+        allow read: if roomContainsCaller(roomId);
+        allow write: if false;
+      }
     }
 
     // ----- matchQueue -------------------------------------------------------
@@ -174,6 +190,14 @@ service cloud.firestore {
         resource.data.fromUid == request.auth.uid
       );
       allow update: if false; // requests are immutable; accept = delete + batch.
+    }
+
+    // ----- config (server twin of Remote Config) ----------------------------
+    // Server-driven economy/reputation parameters. Read-only to clients; managed
+    // from the console / Admin SDK so prices & rules change without an app update.
+    match /config/{doc} {
+      allow read: if signedIn();
+      allow write: if false;
     }
 
     // ----- default deny -----------------------------------------------------

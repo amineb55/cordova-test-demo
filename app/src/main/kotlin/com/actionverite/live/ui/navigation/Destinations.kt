@@ -10,8 +10,12 @@ object Destinations {
     const val LEADERBOARD = "leaderboard"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
+    const val WALLET = "wallet"
 
     const val ARG_ROOM_ID = "roomId"
     const val GAME = "game/{$ARG_ROOM_ID}"
     fun game(roomId: String) = "game/$roomId"
+
+    const val RATING = "rating/{$ARG_ROOM_ID}"
+    fun rating(roomId: String) = "rating/$roomId"
 }

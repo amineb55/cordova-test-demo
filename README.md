@@ -13,8 +13,9 @@ Messaging, Crashlytics, App Check) and **Cloud Functions** that call the
 **Anthropic Claude** API for challenge generation and text moderation.
 
 > **Project status (read this first):** the **domain core is fully implemented and
-> unit-tested** (~80 passing JVM tests). The **Android UI/data layers and the
-> Cloud Functions backend are implemented but not yet build-verified end-to-end**:
+> unit-tested** (99 passing JVM tests). The **Android UI/data layers are implemented
+> but not yet build-verified end-to-end; the Cloud Functions backend type-checks
+> (`tsc`)**:
 > assembling the APK and running the app require a configured Firebase project, a
 > `google-services.json`, a Google OAuth web client id, an Anthropic API key and a
 > device/emulator. See [Project status](#project-status) for the honest breakdown.
@@ -76,9 +77,27 @@ reducer in the framework-free domain layer.
   gate) plus a server-side Claude classifier with a deterministic rule-based
   fallback. Minors and non-opted-in players can never receive adult content.
 - **Matchmaking** — a weighted compatibility scorer (`MatchmakingScorer`:
-  language · interests · level · age · country · ping) and group formation
-  (`FormMatchUseCase`), mirrored server-side by the `requestMatch` Cloud Function
-  for server-authoritative queueing.
+  **same-country-first** (0.30) · language (0.22) · interests (0.18) ·
+  **reputation** (0.12) · level · age · ping) with **best-effort gender balancing**
+  and group formation (`FormMatchUseCase`), mirrored server-side by the
+  `requestMatch` Cloud Function for server-authoritative queueing.
+- **Gold economy & reputation (v2)** — a fully **server-tunable** Gold economy and
+  reputation system (see [`docs/ECONOMY.md`](docs/ECONOMY.md)):
+  - **Gold rules** (`GoldEconomyUseCase`) — join cost **10**, **+1** on success,
+    **−3** on refusal (clamped at zero, never negative), all from `GoldConfig`.
+  - **Monetization** (`GoldPackCalculator`) — rewarded video **+4 Gold**, a
+    **40 Gold = 1 USD** reference rate, and server-configured Gold packs (e.g.
+    `pack_500` = 500 Gold / $10, a bonus tier) with `bonusGold` / `bestValuePack`
+    helpers.
+  - **Reputation** (`ReputationCalculator`) — post-game peer ratings (1–5) folded
+    into a running average across four tiers (`EXCELLENT / GOOD / NEW /
+    FEW_RATINGS`), with **`NEW` prioritized above `FEW_RATINGS`** so new accounts
+    get integrated.
+  - **Remote Config** — every rule/price/threshold is driven by Firebase Remote
+    Config (`RemoteConfigRepositoryImpl`); **no app update needed** to change them.
+  - **Server authority** — balances and reputation are mutated only by Cloud
+    Functions (`economy.ts`, `reputation.ts`), with an append-only transactions
+    ledger (anti-cheat).
 - **Social** — friends &amp; requests, presence, in-room chat (`FriendRepository`,
   `ChatRepository`, `Friend`, `FriendRequest`, `ChatMessage`).
 - **Progression** — closed-form XP↔level mapping (`LevelSystem`), XP awards
@@ -383,9 +402,10 @@ binary.
   moderation and matchmaking flows.
 - In-code KDoc — the domain use cases and models carry detailed KDoc that maps each
   rule back to the original spec; start with `usecase/game/` and `model/Challenge.kt`.
-- A `docs/` directory and a dedicated `SETUP.md` are **not present yet**; the
-  build/run and backend sections above are the authoritative setup instructions for
-  now.
+- The [`docs/`](docs/) directory contains the deep-dive guides:
+  [`ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`SETUP.md`](docs/SETUP.md),
+  [`FIRESTORE_SCHEMA.md`](docs/FIRESTORE_SCHEMA.md),
+  [`GAME_DESIGN.md`](docs/GAME_DESIGN.md) and [`ECONOMY.md`](docs/ECONOMY.md).
 
 ---
 

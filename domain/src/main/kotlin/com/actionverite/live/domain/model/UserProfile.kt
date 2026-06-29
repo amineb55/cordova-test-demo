@@ -26,9 +26,12 @@ data class UserProfile(
     val languageCode: String = "en",      // ISO-639-1
     val countryCode: String = "US",       // ISO-3166-1 alpha-2
     val birthEpochDay: Long? = null,      // days since 1970-01-01; null = undisclosed
+    val gender: Gender = Gender.UNSPECIFIED,
     val interests: Set<Interest> = emptySet(),
     val limits: ContentLimits = ContentLimits.DEFAULT,
     val stats: PlayerStats = PlayerStats.EMPTY,
+    val gold: Long = 0,                    // current Gold balance (server-authoritative)
+    val reputation: Reputation = Reputation.NEW_ACCOUNT,
     val createdAtEpochMs: Long = 0L,
 ) {
     /**

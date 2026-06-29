@@ -4,12 +4,15 @@ import com.actionverite.live.data.common.AndroidDispatcherProvider
 import com.actionverite.live.data.repository.AuthRepositoryImpl
 import com.actionverite.live.data.repository.ChallengeRepositoryImpl
 import com.actionverite.live.data.repository.ChatRepositoryImpl
+import com.actionverite.live.data.repository.EconomyRepositoryImpl
 import com.actionverite.live.data.repository.FriendRepositoryImpl
 import com.actionverite.live.data.repository.GameRepositoryImpl
 import com.actionverite.live.data.repository.LeaderboardRepositoryImpl
 import com.actionverite.live.data.repository.MatchmakingRepositoryImpl
 import com.actionverite.live.data.repository.ModerationRepositoryImpl
 import com.actionverite.live.data.repository.NotificationRepositoryImpl
+import com.actionverite.live.data.repository.RemoteConfigRepositoryImpl
+import com.actionverite.live.data.repository.ReputationRepositoryImpl
 import com.actionverite.live.data.repository.RoomRepositoryImpl
 import com.actionverite.live.data.repository.UserRepositoryImpl
 import com.actionverite.live.data.webrtc.WebRtcRepositoryImpl
@@ -21,8 +24,11 @@ import com.actionverite.live.domain.repository.FriendRepository
 import com.actionverite.live.domain.repository.GameRepository
 import com.actionverite.live.domain.repository.LeaderboardRepository
 import com.actionverite.live.domain.repository.MatchmakingRepository
+import com.actionverite.live.domain.repository.EconomyRepository
 import com.actionverite.live.domain.repository.ModerationRepository
 import com.actionverite.live.domain.repository.NotificationRepository
+import com.actionverite.live.domain.repository.RemoteConfigRepository
+import com.actionverite.live.domain.repository.ReputationRepository
 import com.actionverite.live.domain.repository.RoomRepository
 import com.actionverite.live.domain.repository.RtcRepository
 import com.actionverite.live.domain.repository.UserRepository
@@ -92,4 +98,16 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindRtcRepository(impl: WebRtcRepositoryImpl): RtcRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindEconomyRepository(impl: EconomyRepositoryImpl): EconomyRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindReputationRepository(impl: ReputationRepositoryImpl): ReputationRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindRemoteConfigRepository(impl: RemoteConfigRepositoryImpl): RemoteConfigRepository
 }

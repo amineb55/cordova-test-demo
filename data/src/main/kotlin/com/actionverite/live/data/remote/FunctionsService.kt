@@ -86,9 +86,46 @@ class FunctionsService @Inject constructor(
         return data?.get("roomId") as? String
     }
 
+    // ----- Economy (server-authoritative Gold) ------------------------------
+
+    /** Invokes a Gold-mutating callable and returns the new authoritative balance. */
+    private suspend fun callBalance(name: String, payload: Map<String, Any?>): Long {
+        @Suppress("UNCHECKED_CAST")
+        val data = functions.getHttpsCallable(name).call(payload).await().data as? Map<String, Any?>
+        return (data?.get("balance") as? Number)?.toLong() ?: 0L
+    }
+
+    suspend fun chargeGameFee(roomId: String): Long =
+        callBalance(FN_CHARGE_GAME_FEE, mapOf("roomId" to roomId))
+
+    suspend fun rewardChallenge(roomId: String): Long =
+        callBalance(FN_REWARD_CHALLENGE, mapOf("roomId" to roomId))
+
+    suspend fun penalizeRefusal(roomId: String): Long =
+        callBalance(FN_PENALIZE_REFUSAL, mapOf("roomId" to roomId))
+
+    suspend fun grantRewardedVideo(ssvToken: String): Long =
+        callBalance(FN_GRANT_REWARDED_VIDEO, mapOf("ssvToken" to ssvToken))
+
+    suspend fun purchasePack(packId: String, purchaseToken: String): Long =
+        callBalance(FN_PURCHASE_PACK, mapOf("packId" to packId, "purchaseToken" to purchaseToken))
+
+    // ----- Reputation -------------------------------------------------------
+
+    suspend fun submitRatings(roomId: String, ratings: List<Map<String, Any?>>) {
+        functions.getHttpsCallable(FN_SUBMIT_RATINGS)
+            .call(mapOf("roomId" to roomId, "ratings" to ratings)).await()
+    }
+
     companion object {
         const val FN_GENERATE_CHALLENGE = "generateChallenge"
         const val FN_MODERATE_TEXT = "moderateText"
         const val FN_REQUEST_MATCH = "requestMatch"
+        const val FN_CHARGE_GAME_FEE = "chargeGameFee"
+        const val FN_REWARD_CHALLENGE = "rewardChallenge"
+        const val FN_PENALIZE_REFUSAL = "penalizeRefusal"
+        const val FN_GRANT_REWARDED_VIDEO = "grantRewardedVideo"
+        const val FN_PURCHASE_PACK = "purchasePack"
+        const val FN_SUBMIT_RATINGS = "submitRatings"
     }
 }

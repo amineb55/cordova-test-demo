@@ -1,8 +1,10 @@
 package com.actionverite.live.domain.usecase.matchmaking
 
+import com.actionverite.live.domain.model.Gender
 import com.actionverite.live.domain.model.Interest
 import com.actionverite.live.domain.model.MatchPreferences
 import com.actionverite.live.domain.model.MatchProfile
+import com.actionverite.live.domain.model.ReputationTier
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
@@ -18,6 +20,7 @@ class FormMatchUseCaseTest {
         level = 10,
         interests = setOf(Interest.MUSIC, Interest.GAMING),
         allowAdult = true,
+        reputationTier = ReputationTier.EXCELLENT,
     )
 
     private fun candidate(uid: String, block: MatchProfile.() -> MatchProfile = { this }) =
@@ -63,8 +66,8 @@ class FormMatchUseCaseTest {
 
     @Test
     fun `filters out candidates beyond the level and age gaps`() {
-        val farLevel = candidate("lvl") { copy(level = 30) }       // gap 20 > 10
-        val farAge = candidate("age") { copy(age = 40) }           // gap 15 > 8
+        val farLevel = candidate("lvl") { copy(level = 30) }
+        val farAge = candidate("age") { copy(age = 40) }
         assertThat(formMatch(self, listOf(farLevel, farAge))).isNull()
     }
 
@@ -74,10 +77,36 @@ class FormMatchUseCaseTest {
     }
 
     @Test
+    fun `gender balancing prefers the under-represented gender`() {
+        val maleSelf = self.copy(gender = Gender.MALE)
+        // Equal-scoring candidates (same everything but uid + gender).
+        val a = candidate("a") { copy(gender = Gender.MALE) }
+        val b = candidate("b") { copy(gender = Gender.MALE) }
+        val c = candidate("c") { copy(gender = Gender.FEMALE) }
+        val prefs = MatchPreferences(desiredSize = 3, balanceGender = true)
+
+        val balanced = formMatch(maleSelf, listOf(a, b, c), prefs)
+        // Should pull in the female candidate to balance, plus the best remaining male.
+        assertThat(balanced!!.members.map { it.uid }).containsExactly("self", "c", "a").inOrder()
+    }
+
+    @Test
+    fun `gender balancing can be disabled to take pure top scorers`() {
+        val maleSelf = self.copy(gender = Gender.MALE)
+        val a = candidate("a") { copy(gender = Gender.MALE) }
+        val b = candidate("b") { copy(gender = Gender.MALE) }
+        val c = candidate("c") { copy(gender = Gender.FEMALE) }
+        val prefs = MatchPreferences(desiredSize = 3, balanceGender = false)
+
+        val unbalanced = formMatch(maleSelf, listOf(a, b, c), prefs)
+        assertThat(unbalanced!!.members.map { it.uid }).containsExactly("self", "a", "b").inOrder()
+    }
+
+    @Test
     fun `ties are broken deterministically by uid`() {
         val b = candidate("bbb")
         val a = candidate("aaa")
-        val result = formMatch(self, listOf(b, a)) // both perfect score
+        val result = formMatch(self, listOf(b, a))
         assertThat(result!!.members.map { it.uid }).containsExactly("self", "aaa")
     }
 }

@@ -4,9 +4,11 @@ import com.actionverite.live.data.common.firebaseCall
 import com.actionverite.live.data.remote.FirestorePaths
 import com.actionverite.live.data.remote.FunctionsService
 import com.actionverite.live.domain.common.DomainResult
+import com.actionverite.live.domain.model.Gender
 import com.actionverite.live.domain.model.Interest
 import com.actionverite.live.domain.model.MatchPreferences
 import com.actionverite.live.domain.model.MatchProfile
+import com.actionverite.live.domain.model.ReputationTier
 import com.actionverite.live.domain.repository.MatchmakingRepository
 import com.actionverite.live.domain.repository.MatchmakingState
 import com.google.firebase.auth.FirebaseAuth
@@ -70,6 +72,8 @@ class MatchmakingRepositoryImpl @Inject constructor(
         "interests" to interests.map { it.name },
         "allowAdult" to allowAdult,
         "pingMs" to pingMs,
+        "gender" to gender.name,
+        "reputationTier" to reputationTier.name,
         "desiredSize" to prefs.desiredSize,
         "enqueuedAt" to System.currentTimeMillis(),
     )
@@ -97,6 +101,9 @@ class MatchmakingRepositoryImpl @Inject constructor(
                 .toSet(),
             allowAdult = getBoolean("allowAdult") ?: false,
             pingMs = getLong("pingMs")?.toInt() ?: 0,
+            gender = runCatching { Gender.valueOf(getString("gender") ?: "") }.getOrDefault(Gender.UNSPECIFIED),
+            reputationTier = runCatching { ReputationTier.valueOf(getString("reputationTier") ?: "") }
+                .getOrDefault(ReputationTier.NEW),
         )
     }
 }

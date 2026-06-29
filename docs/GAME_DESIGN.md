@@ -462,3 +462,80 @@ Example: 5 players, portrait → `rows = 3, cols = 2`, so `tilesInRow(0) = 2`,
 On `FINISHED`, each participant additionally receives `GAME_FINISHED` (+15 XP)
 and `gamesPlayed += 1` via the game‑completion flow, which may unlock
 `FIRST_GAME` / `GLOBETROTTER`.
+
+---
+
+## Economy, monetization & reputation (v2)
+
+The **v2** enhancement adds a Gold economy, monetization, a reputation system, and
+reputation‑aware matchmaking. **Every rule, reward, price and threshold is
+server‑configurable via Firebase Remote Config — no app update is needed to change
+them.** The full spec, with all formulas, helpers, Remote Config keys and the
+server‑authority model, lives in **[`ECONOMY.md`](./ECONOMY.md)**; this is a summary.
+
+### Gold economy (`GoldConfig`, `GoldEconomyUseCase`)
+
+| Rule | Default | Reason |
+| --- | --- | --- |
+| Join / start a game (charged; also the minimum to play) | **10 Gold** | `GAME_JOIN` |
+| Complete a dare / answer a truth | **+1 Gold** | `CHALLENGE_SUCCESS` |
+| Refuse a question or action | **−3 Gold** | `REFUSAL` |
+| Watch a rewarded video ad | **+4 Gold** | `REWARDED_VIDEO` |
+
+Balances **never go negative** — penalties are clamped at zero
+(*"Si le joueur possède moins de 3 Gold, son solde devient 0"*), and the returned
+`GoldChange` reports both the new balance and the `delta` actually applied.
+
+### Monetization (`GoldPackCalculator`)
+
+The display reference is **40 Gold = 1 USD** (`referenceGoldPerUsd`). Gold packs are
+**configured server‑side**; the defaults are `pack_40` (40 Gold / $1, flat rate) and
+`pack_500` (500 Gold / $10, a **bonus** pack worth +100 Gold over the reference).
+Helpers: `goldPerUsd` (value ranking), `bonusGold(pack)` (extra over reference),
+`bestValuePack()` (highest `goldPerUsd` → `pack_500`). Rewarded video grants
+**+4 Gold** after ad‑network SSV verification.
+
+### Reputation (`ReputationTier`, `ReputationCalculator`)
+
+Post‑game peer ratings (**1..5**) fold into a **running average**
+(`applyRating`) and map to one of four tiers via `tierFor`:
+
+| Tier | Condition (`ReputationConfig` defaults: `minRatings = 5`, `excellent = 4.5`, `good = 3.5`) |
+| --- | --- |
+| `NEW` | never rated (`ratingsCount <= 0`) |
+| `FEW_RATINGS` | rated but `< 5` ratings |
+| `EXCELLENT` | `>= 5` ratings and average `>= 4.5` |
+| `GOOD` | `>= 5` ratings, below excellent |
+
+**`NEW` is intentionally prioritized above `FEW_RATINGS`** so brand‑new accounts get
+integrated and earn their first ratings.
+
+### Matchmaking changes (`MatchmakingScorer`, `FormMatchUseCase`)
+
+Same‑country is now the **top priority, then language**, with reputation weighted in
+and **best‑effort gender balancing**. The weighted components sum to 1.0:
+
+| Component | Weight |
+| --- | --- |
+| Country | 0.30 |
+| Language | 0.22 |
+| Interests | 0.18 |
+| Reputation | 0.12 |
+| Level | 0.08 |
+| Age | 0.05 |
+| Ping | 0.05 |
+
+Reputation tier weights: `EXCELLENT 1.0 · GOOD 0.8 · NEW 0.6 · FEW_RATINGS 0.5`
+(again, `NEW` above `FEW_RATINGS`). Gender (`MALE / FEMALE / UNSPECIFIED`) is a soft
+signal: `FormMatchUseCase` greedily favours the under‑represented binary gender at
+each step while still picking the highest‑scored candidate — *"équilibrer
+hommes/femmes lorsque possible"*; `UNSPECIFIED` users never count toward balancing.
+
+### Server authority
+
+Balances and reputation are **mutated only by Cloud Functions** (anti‑cheat):
+`economy.ts`, `reputation.ts`, `matchmaking.ts`, with parameters read from the
+`config/economy` Firestore document (Remote Config's server twin). Every Gold change
+is recorded in an **append‑only ledger** under `users/{uid}/transactions`
+(`delta`, `reason`, `balanceAfter`, …). See [`ECONOMY.md`](./ECONOMY.md) for the full
+Remote Config key list and ledger schema.

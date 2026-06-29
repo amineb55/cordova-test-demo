@@ -10,6 +10,9 @@ import com.google.firebase.functions.ktx.functions
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.ktx.messaging
+import com.google.firebase.remoteconfig.FirebaseRemoteConfig
+import com.google.firebase.remoteconfig.ktx.remoteConfig
+import com.google.firebase.remoteconfig.ktx.remoteConfigSettings
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.ktx.storage
 import dagger.Module
@@ -47,6 +50,17 @@ object FirebaseModule {
     @Provides
     @Singleton
     fun provideMessaging(): FirebaseMessaging = Firebase.messaging
+
+    @Provides
+    @Singleton
+    fun provideRemoteConfig(): FirebaseRemoteConfig = Firebase.remoteConfig.apply {
+        setConfigSettingsAsync(
+            remoteConfigSettings {
+                // Frequent in debug builds; production should use a longer interval.
+                minimumFetchIntervalInSeconds = 3600
+            },
+        )
+    }
 
     @Provides
     @Singleton

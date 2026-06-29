@@ -16,9 +16,27 @@ data class UserDto(
     val languageCode: String = "en",
     val countryCode: String = "US",
     val birthEpochDay: Long? = null,
+    val gender: String = "UNSPECIFIED",
     val interests: List<String> = emptyList(),
     val limits: LimitsDto = LimitsDto(),
     val stats: StatsDto = StatsDto(),
+    val gold: Long = 0,
+    val reputation: ReputationDto = ReputationDto(),
+    val createdAtEpochMs: Long = 0L,
+)
+
+data class ReputationDto(
+    val averageScore: Double = 0.0,
+    val ratingsCount: Int = 0,
+    val tier: String = "NEW",
+)
+
+/** A single peer rating, stored under rooms/{id}/ratings or users/{uid}/ratings. */
+data class RatingDto(
+    val raterUid: String = "",
+    val targetUid: String = "",
+    val score: Int = 3,
+    val roomId: String = "",
     val createdAtEpochMs: Long = 0L,
 )
 

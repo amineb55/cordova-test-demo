@@ -15,7 +15,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -52,6 +55,7 @@ fun HomeRoute(
     onOpenFriends: () -> Unit,
     onOpenLeaderboard: () -> Unit,
     onOpenProfile: () -> Unit,
+    onOpenWallet: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -65,6 +69,7 @@ fun HomeRoute(
         onOpenFriends = onOpenFriends,
         onOpenLeaderboard = onOpenLeaderboard,
         onOpenProfile = onOpenProfile,
+        onOpenWallet = onOpenWallet,
     )
 }
 
@@ -79,6 +84,7 @@ private fun HomeScreen(
     onOpenFriends: () -> Unit,
     onOpenLeaderboard: () -> Unit,
     onOpenProfile: () -> Unit,
+    onOpenWallet: () -> Unit,
 ) {
     val snackbar = remember { SnackbarHostState() }
 
@@ -90,7 +96,12 @@ private fun HomeScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Action ou Vérité Live") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Action ou Vérité Live") },
+                actions = { GoldChip(gold = uiState.profile?.gold ?: 0L, onClick = onOpenWallet) },
+            )
+        },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         when {
@@ -130,6 +141,24 @@ private fun HomeScreen(
             }
         }
     }
+}
+
+/** Gold balance chip in the top bar; tapping it opens the wallet/store. */
+@Composable
+private fun GoldChip(gold: Long, onClick: () -> Unit) {
+    AssistChip(
+        onClick = onClick,
+        label = { Text("$gold") },
+        leadingIcon = {
+            Icon(
+                Icons.Filled.MonetizationOn,
+                contentDescription = "Gold",
+                modifier = Modifier.width(18.dp),
+            )
+        },
+        colors = AssistChipDefaults.assistChipColors(),
+        modifier = Modifier.padding(end = 8.dp),
+    )
 }
 
 /** Tappable header showing avatar, name and a level progress bar. */

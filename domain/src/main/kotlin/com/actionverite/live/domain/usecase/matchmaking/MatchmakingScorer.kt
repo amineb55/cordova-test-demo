@@ -2,17 +2,22 @@ package com.actionverite.live.domain.usecase.matchmaking
 
 import com.actionverite.live.domain.model.MatchPreferences
 import com.actionverite.live.domain.model.MatchProfile
+import com.actionverite.live.domain.model.ReputationTier
 import javax.inject.Inject
 import kotlin.math.abs
 import kotlin.math.min
 
 /**
  * Scores how compatible a candidate is with the seeker on a 0.0..1.0 scale
- * ("matchmaking intelligent"). The weighted components sum to 1.0:
+ * ("matchmaking intelligent"). Per the enhanced spec, **same country is the top
+ * priority, then same language**, followed by interests and reputation. The
+ * weighted components sum to 1.0:
  *
- *   language 0.30 · interests 0.25 · level 0.15 · age 0.10 · country 0.10 · ping 0.10
+ *   country 0.30 · language 0.22 · interests 0.18 · reputation 0.12 ·
+ *   level 0.08 · age 0.05 · ping 0.05
  *
- * Pure and deterministic, so the whole matchmaking ranking is unit-testable.
+ * Gender balancing is a group-formation concern handled in [FormMatchUseCase],
+ * not a pairwise score. Pure and deterministic, so the ranking is unit-testable.
  */
 class MatchmakingScorer @Inject constructor() {
 
@@ -21,20 +26,34 @@ class MatchmakingScorer @Inject constructor() {
         candidate: MatchProfile,
         preferences: MatchPreferences = MatchPreferences(),
     ): Double {
-        val language = if (self.languageCode == candidate.languageCode) 1.0 else 0.0
         val country = if (self.countryCode == candidate.countryCode) 1.0 else 0.0
+        val language = if (self.languageCode == candidate.languageCode) 1.0 else 0.0
         val interests = jaccard(self.interests, candidate.interests)
+        val reputation = reputationValue(candidate.reputationTier)
         val level = proximity(abs(self.level - candidate.level), preferences.maxLevelGap)
         val age = ageScore(self.age, candidate.age, preferences.maxAgeGap)
         val ping = 1.0 - min(1.0, candidate.pingMs.coerceAtLeast(0).toDouble() / preferences.maxPingMs)
 
-        val score = W_LANGUAGE * language +
+        val score = W_COUNTRY * country +
+            W_LANGUAGE * language +
             W_INTERESTS * interests +
+            W_REPUTATION * reputation +
             W_LEVEL * level +
             W_AGE * age +
-            W_COUNTRY * country +
             W_PING * ping
         return score.coerceIn(0.0, 1.0)
+    }
+
+    /**
+     * Maps a reputation tier to a preference weight. [ReputationTier.NEW] is
+     * boosted above [ReputationTier.FEW_RATINGS] so brand-new accounts are
+     * regularly integrated to earn their first ratings, per the spec.
+     */
+    private fun reputationValue(tier: ReputationTier): Double = when (tier) {
+        ReputationTier.EXCELLENT -> 1.0
+        ReputationTier.GOOD -> 0.8
+        ReputationTier.NEW -> 0.6
+        ReputationTier.FEW_RATINGS -> 0.5
     }
 
     private fun <T> jaccard(a: Set<T>, b: Set<T>): Double {
@@ -57,11 +76,12 @@ class MatchmakingScorer @Inject constructor() {
     }
 
     companion object {
-        const val W_LANGUAGE = 0.30
-        const val W_INTERESTS = 0.25
-        const val W_LEVEL = 0.15
-        const val W_AGE = 0.10
-        const val W_COUNTRY = 0.10
-        const val W_PING = 0.10
+        const val W_COUNTRY = 0.30
+        const val W_LANGUAGE = 0.22
+        const val W_INTERESTS = 0.18
+        const val W_REPUTATION = 0.12
+        const val W_LEVEL = 0.08
+        const val W_AGE = 0.05
+        const val W_PING = 0.05
     }
 }

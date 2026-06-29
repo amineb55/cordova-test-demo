@@ -144,6 +144,42 @@ export const ROOM_MAX_PLAYERS = 6;
 export const DIFFICULTY_MIN = 1;
 export const DIFFICULTY_MAX = 5;
 
+/** Mirrors `Gender` (Gender.kt). */
+export type Gender = "MALE" | "FEMALE" | "UNSPECIFIED";
+
+/** Mirrors `ReputationTier` (Reputation.kt). */
+export type ReputationTier = "EXCELLENT" | "GOOD" | "NEW" | "FEW_RATINGS";
+
 /** Firestore collection names — mirrors `FirestorePaths`. */
 export const COLLECTION_MATCH_QUEUE = "matchQueue";
 export const COLLECTION_ROOMS = "rooms";
+export const COLLECTION_USERS = "users";
+export const SUBCOLLECTION_TRANSACTIONS = "transactions";
+export const SUBCOLLECTION_RATINGS = "ratings";
+
+/**
+ * Server-side Gold economy defaults. These mirror `GoldConfig.DEFAULT`; in
+ * production they are overridden by the `config/economy` Firestore document so
+ * the backend and Remote Config stay in lockstep (spec: fully server-driven).
+ */
+export const ECONOMY_DEFAULTS = {
+  joinCost: 10,
+  rewardSuccess: 1,
+  penaltyRefuse: 3,
+  rewardedVideoGold: 4,
+};
+
+/** Reputation defaults — mirror `ReputationConfig.DEFAULT`. */
+export const REPUTATION_DEFAULTS = {
+  minRatingsForTier: 5,
+  excellentThreshold: 4.5,
+  goodThreshold: 3.5,
+};
+
+/** Maps an average rating + count to a tier — mirrors `ReputationCalculator`. */
+export function reputationTierFor(average: number, count: number): ReputationTier {
+  if (count <= 0) return "NEW";
+  if (count < REPUTATION_DEFAULTS.minRatingsForTier) return "FEW_RATINGS";
+  if (average >= REPUTATION_DEFAULTS.excellentThreshold) return "EXCELLENT";
+  return "GOOD";
+}

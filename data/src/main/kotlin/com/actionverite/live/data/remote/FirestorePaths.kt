@@ -22,6 +22,8 @@ object FirestorePaths {
     const val FRIENDS = "friends"    // users/{uid}/friends/{friendUid}
     const val SERVED_CHALLENGES = "served" // users/{uid}/served/{sig}
     const val DM = "dm"              // users/{uid}/dm/{peer}/messages
+    const val TRANSACTIONS = "transactions" // users/{uid}/transactions/{id} (Gold ledger, function-written)
+    const val RATINGS = "ratings"   // rooms/{id}/ratings/{raterUid_targetUid} (peer ratings)
 
     // Common field names referenced in queries.
     const val FIELD_XP = "xp"

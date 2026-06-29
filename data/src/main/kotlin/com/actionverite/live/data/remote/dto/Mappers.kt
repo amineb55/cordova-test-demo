@@ -13,12 +13,15 @@ import com.actionverite.live.domain.model.Friend
 import com.actionverite.live.domain.model.FriendRequest
 import com.actionverite.live.domain.model.FriendStatus
 import com.actionverite.live.domain.model.GamePhase
+import com.actionverite.live.domain.model.Gender
 import com.actionverite.live.domain.model.GameSession
 import com.actionverite.live.domain.model.Interest
 import com.actionverite.live.domain.model.ChatMessage
 import com.actionverite.live.domain.model.Player
 import com.actionverite.live.domain.model.PlayerStats
 import com.actionverite.live.domain.model.Presence
+import com.actionverite.live.domain.model.Reputation
+import com.actionverite.live.domain.model.ReputationTier
 import com.actionverite.live.domain.model.Room
 import com.actionverite.live.domain.model.RoomStatus
 import com.actionverite.live.domain.model.RoomVisibility
@@ -42,9 +45,12 @@ fun UserDto.toDomain() = UserProfile(
     languageCode = languageCode,
     countryCode = countryCode,
     birthEpochDay = birthEpochDay,
+    gender = gender.toEnum(Gender.UNSPECIFIED),
     interests = interests.mapNotNull { runCatching { Interest.valueOf(it) }.getOrNull() }.toSet(),
     limits = limits.toDomain(),
     stats = stats.toDomain(),
+    gold = gold,
+    reputation = reputation.toDomain(),
     createdAtEpochMs = createdAtEpochMs,
 )
 
@@ -58,10 +64,25 @@ fun UserProfile.toDto() = UserDto(
     languageCode = languageCode,
     countryCode = countryCode,
     birthEpochDay = birthEpochDay,
+    gender = gender.name,
     interests = interests.map { it.name },
     limits = limits.toDto(),
     stats = stats.toDto(),
+    gold = gold,
+    reputation = reputation.toDto(),
     createdAtEpochMs = createdAtEpochMs,
+)
+
+fun ReputationDto.toDomain() = Reputation(
+    averageScore = averageScore,
+    ratingsCount = ratingsCount,
+    tier = tier.toEnum(ReputationTier.NEW),
+)
+
+fun Reputation.toDto() = ReputationDto(
+    averageScore = averageScore,
+    ratingsCount = ratingsCount,
+    tier = tier.name,
 )
 
 fun LimitsDto.toDomain() = ContentLimits(

@@ -18,6 +18,14 @@ import { generateChallenge as runGenerateChallenge } from "./challenge";
 import { moderateText as runModerateText } from "./moderation";
 import { requestMatch as runRequestMatch } from "./matchmaking";
 import {
+  chargeGameFee as runChargeGameFee,
+  grantRewardedVideo as runGrantRewardedVideo,
+  penalizeRefusal as runPenalizeRefusal,
+  purchasePack as runPurchasePack,
+  rewardChallenge as runRewardChallenge,
+} from "./economy";
+import { submitRatings as runSubmitRatings } from "./reputation";
+import {
   ChallengeOutput,
   ContentLimits,
   DifficultyTarget,
@@ -161,3 +169,73 @@ export const requestMatch = onCall(
     }
   },
 );
+
+/** Helper: pull a non-empty string field from the callable payload. */
+function requireString(data: any, field: string): string {
+  const value = data?.[field];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new HttpsError("invalid-argument", `${field} is required.`);
+  }
+  return value;
+}
+
+// ----- Economy (server-authoritative Gold) --------------------------------
+
+/** chargeGameFee — deducts the entry fee; fails with failed-precondition if broke. */
+export const chargeGameFee = onCall(baseOptions, async (request): Promise<{ balance: number }> => {
+  const uid = requireAuth(request);
+  const roomId = requireString(request.data, "roomId");
+  try {
+    return { balance: await runChargeGameFee(uid, roomId) };
+  } catch (err) {
+    if (err instanceof Error && err.message === "INSUFFICIENT_FUNDS") {
+      throw new HttpsError("failed-precondition", "Not enough Gold to join.");
+    }
+    console.error("chargeGameFee failed", err);
+    throw new HttpsError("internal", "Could not charge entry fee.");
+  }
+});
+
+/** rewardChallenge — credits the success reward (+1 Gold by default). */
+export const rewardChallenge = onCall(baseOptions, async (request): Promise<{ balance: number }> => {
+  const uid = requireAuth(request);
+  const roomId = requireString(request.data, "roomId");
+  return { balance: await runRewardChallenge(uid, roomId) };
+});
+
+/** penalizeRefusal — applies the refusal penalty (clamped at zero). */
+export const penalizeRefusal = onCall(baseOptions, async (request): Promise<{ balance: number }> => {
+  const uid = requireAuth(request);
+  const roomId = requireString(request.data, "roomId");
+  return { balance: await runPenalizeRefusal(uid, roomId) };
+});
+
+/** grantRewardedVideo — credits a rewarded-ad grant after SSV verification. */
+export const grantRewardedVideo = onCall(baseOptions, async (request): Promise<{ balance: number }> => {
+  const uid = requireAuth(request);
+  const ssvToken = requireString(request.data, "ssvToken");
+  return { balance: await runGrantRewardedVideo(uid, ssvToken) };
+});
+
+/** purchasePack — validates a store purchase and credits the pack's Gold. */
+export const purchasePack = onCall(baseOptions, async (request): Promise<{ balance: number }> => {
+  const uid = requireAuth(request);
+  const packId = requireString(request.data, "packId");
+  const purchaseToken = requireString(request.data, "purchaseToken");
+  try {
+    return { balance: await runPurchasePack(uid, packId, purchaseToken) };
+  } catch (err) {
+    console.error("purchasePack failed", err);
+    throw new HttpsError("internal", "Purchase validation failed.");
+  }
+});
+
+// ----- Reputation ----------------------------------------------------------
+
+/** submitRatings — records end-of-game peer ratings and updates reputations. */
+export const submitRatings = onCall(baseOptions, async (request): Promise<{ ok: boolean }> => {
+  const uid = requireAuth(request);
+  const roomId = requireString(request.data, "roomId");
+  await runSubmitRatings(uid, roomId, request.data?.ratings);
+  return { ok: true };
+});
