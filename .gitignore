@@ -1,0 +1,42 @@
+# Android / Gradle
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+**/build/
+/captures
+.externalNativeBuild
+.cxx
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# Kotlin
+.kotlin/
+
+# Firebase (do not commit real secrets)
+app/google-services.json
+**/google-services.json
+service-account*.json
+.firebase/
+firebase-debug.log
+firestore-debug.log
+
+# Secrets / local config
+secrets.properties
+*.keystore
+*.jks
+
+# Node (Cloud Functions)
+node_modules/
+functions/lib/
+npm-debug.log
+
+# Misc
+*.log
+.env
+.env.*

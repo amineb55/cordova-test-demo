@@ -1,0 +1,30 @@
+{
+  "_comment": "Placeholder. Download the REAL google-services.json from your Firebase project (Project settings > Your apps > Android) and place it at app/google-services.json. That file is git-ignored.",
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "action-verite-live",
+    "storage_bucket": "action-verite-live.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+        "android_client_info": {
+          "package_name": "com.actionverite.live"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "REPLACE_WITH_REAL_ANDROID_API_KEY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
