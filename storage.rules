@@ -1,0 +1,41 @@
+rules_version = '2';
+
+// =============================================================================
+// Action ou Verite Live - Cloud Storage security rules
+// -----------------------------------------------------------------------------
+// Avatars are public-readable so other players can see profile/leaderboard
+// pictures, but each user may only write under their own avatars/{uid}/ path.
+// Uploads must be images and stay under the size cap. Everything else is denied.
+// =============================================================================
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Max avatar upload: 5 MiB.
+    function isValidAvatar() {
+      return request.resource != null
+        && request.resource.contentType.matches('image/.*')
+        && request.resource.size < 5 * 1024 * 1024;
+    }
+
+    // Public avatars: anyone may read; only the owner may upload/replace/delete,
+    // and only valid image payloads within the size cap.
+    match /avatars/{uid}/{fileName=**} {
+      allow read: if true;
+      allow write: if isOwner(uid) && isValidAvatar();
+    }
+
+    // Default deny for any other path.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

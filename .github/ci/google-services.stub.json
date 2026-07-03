@@ -1,0 +1,49 @@
+{
+  "_comment": "DUMMY Firebase config used ONLY to let CI compile the Android app. It contains no real credentials. CI copies this to app/google-services.json (git-ignored) before building. Clients cover both the release id (com.actionverite.live) and the debug id (.debug applicationIdSuffix).",
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "action-verite-live-ci",
+    "storage_bucket": "action-verite-live-ci.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000001",
+        "android_client_info": {
+          "package_name": "com.actionverite.live"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDUMMY0000000000000000000000000000000"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000002",
+        "android_client_info": {
+          "package_name": "com.actionverite.live.debug"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDUMMY0000000000000000000000000000000"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

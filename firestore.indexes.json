@@ -1,0 +1,60 @@
+{
+  "//": "Composite indexes for Action ou Verite Live. Single-field equality/range/orderBy queries (e.g. friendRequests by toUid alone, rooms by inviteCode, signals by to/from, users orderBy displayName) are served by Firestore's automatic single-field indexes and are intentionally not listed here. Only multi-field combinations and explicit ordering needs that Firestore cannot auto-serve are declared below.",
+  "indexes": [
+    {
+      "//": "Global/national leaderboard: users ordered by stats.xp desc (LeaderboardRepositoryImpl.baseQuery). Declared explicitly so national scope can extend it with countryCode.",
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "stats.xp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "//": "National leaderboard: filter by countryCode then order by stats.xp desc.",
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "countryCode", "order": "ASCENDING" },
+        { "fieldPath": "stats.xp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "//": "Incoming friend requests, newest first (FriendRepositoryImpl.observeIncomingRequests: whereEqualTo toUid, ordered by recency).",
+      "collectionGroup": "friendRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "toUid", "order": "ASCENDING" },
+        { "fieldPath": "createdAtEpochMs", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "//": "Outgoing friend requests, newest first (sender views their pending invites).",
+      "collectionGroup": "friendRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "fromUid", "order": "ASCENDING" },
+        { "fieldPath": "createdAtEpochMs", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "//": "Matchmaking pool: candidate selection filtered by language then ordered by recency (server-side matcher reads the queue; MatchmakingRepositoryImpl publishes languageCode/level/enqueuedAt).",
+      "collectionGroup": "matchQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "languageCode", "order": "ASCENDING" },
+        { "fieldPath": "enqueuedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "//": "Matchmaking pool refined by language + country + recency for stricter same-region matching.",
+      "collectionGroup": "matchQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "languageCode", "order": "ASCENDING" },
+        { "fieldPath": "countryCode", "order": "ASCENDING" },
+        { "fieldPath": "enqueuedAt", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
