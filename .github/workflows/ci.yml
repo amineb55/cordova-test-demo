@@ -1,0 +1,79 @@
+name: CI
+
+# Runs the checks that are verifiable without external secrets:
+#  - the pure-JVM :domain unit tests (the game logic, ~99 tests), and
+#  - the Cloud Functions TypeScript build (type-check).
+# The Android :app APK is intentionally NOT assembled here because it requires a
+# real google-services.json (Firebase config) which is not committed. See
+# docs/SETUP.md for the full build.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  domain-tests:
+    name: Domain unit tests (JVM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install required SDK packages
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run domain tests
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :domain:test --no-daemon --stacktrace
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: domain-test-report
+          path: domain/build/reports/tests/test
+          if-no-files-found: ignore
+
+  functions-build:
+    name: Cloud Functions build (tsc)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check / build
+        run: npm run build
