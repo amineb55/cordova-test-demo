@@ -41,7 +41,7 @@ class FunctionsService @Inject constructor(
 
         @Suppress("UNCHECKED_CAST")
         val data = functions.getHttpsCallable(FN_GENERATE_CHALLENGE)
-            .call(payload).await().data as Map<String, Any?>
+            .call(payload).await().getData() as Map<String, Any?>
 
         return ChallengeDto(
             id = data["id"] as? String ?: "",
@@ -59,7 +59,7 @@ class FunctionsService @Inject constructor(
     suspend fun moderateText(text: String): ModerationResult {
         @Suppress("UNCHECKED_CAST")
         val data = functions.getHttpsCallable(FN_MODERATE_TEXT)
-            .call(mapOf("text" to text)).await().data as Map<String, Any?>
+            .call(mapOf("text" to text)).await().getData() as Map<String, Any?>
 
         val verdict = runCatching {
             ModerationVerdict.valueOf(data["verdict"] as? String ?: "ALLOW")
@@ -82,7 +82,7 @@ class FunctionsService @Inject constructor(
     suspend fun requestMatch(preferences: Map<String, Any?>): String? {
         @Suppress("UNCHECKED_CAST")
         val data = functions.getHttpsCallable(FN_REQUEST_MATCH)
-            .call(preferences).await().data as? Map<String, Any?>
+            .call(preferences).await().getData() as? Map<String, Any?>
         return data?.get("roomId") as? String
     }
 
@@ -91,7 +91,7 @@ class FunctionsService @Inject constructor(
     /** Invokes a Gold-mutating callable and returns the new authoritative balance. */
     private suspend fun callBalance(name: String, payload: Map<String, Any?>): Long {
         @Suppress("UNCHECKED_CAST")
-        val data = functions.getHttpsCallable(name).call(payload).await().data as? Map<String, Any?>
+        val data = functions.getHttpsCallable(name).call(payload).await().getData() as? Map<String, Any?>
         return (data?.get("balance") as? Number)?.toLong() ?: 0L
     }
 
