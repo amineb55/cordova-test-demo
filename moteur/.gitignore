@@ -1,0 +1,7 @@
+.env
+__pycache__/
+*.pyc
+sorties/*
+!sorties/.gitkeep
+data/cultures/*
+!data/cultures/.gitkeep
