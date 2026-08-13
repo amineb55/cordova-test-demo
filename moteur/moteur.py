@@ -176,10 +176,12 @@ SCHEMA_CULTURE = [
     ("pays", str), ("sensibilites", dict), ("references_locales", list),
     ("calendrier", list), ("codes_communication", list),
 ]
+SCHEMA_PROFIL = [("niches", list), ("langue_principale", str), ("pays", str)]
 
 
-def valider_comprehension(o):
-    return problemes_dict(o, SCHEMA_COMPREHENSION)
+def valider_comprehension(transcript_demande):
+    champs = SCHEMA_COMPREHENSION + ([("transcript", str)] if transcript_demande else [])
+    return lambda o: problemes_dict(o, champs)
 
 
 def valider_formule(o):
@@ -195,8 +197,13 @@ def valider_generation_a(o):
         return pbs
     if o["verdict"] not in ("pret_a_publier", "optimiser_avant", "revoir"):
         pbs.append("« verdict » doit être pret_a_publier, optimiser_avant ou revoir")
-    if not 1 <= len(o["actions_prioritaires"]) <= 5:
+    if not 3 <= len(o["actions_prioritaires"] or []) <= 5:
         pbs.append("« actions_prioritaires » doit contenir de 3 à 5 actions")
+    if len([h for h in (o["hooks_reecrits"] or []) if h]) < 3:
+        pbs.append("« hooks_reecrits » doit contenir au moins 3 hooks")
+    if len(o["texte_ecran_2_temps"] or []) < 2:
+        pbs.append("« texte_ecran_2_temps » doit contenir au moins 2 temps "
+                   "(setup puis punchline)")
     return pbs
 
 
@@ -207,8 +214,10 @@ def valider_generation_b(o):
     if len(o) != 5:
         pbs.append(f"il faut exactement 5 fiches (reçu : {len(o)})")
     for i, fiche in enumerate(o):
-        for pb in problemes_dict(fiche, CHAMPS_FICHE_B):
-            pbs.append(f"fiche {i + 1} : {pb}")
+        pbs_fiche = problemes_dict(fiche, CHAMPS_FICHE_B)
+        if not pbs_fiche and len(fiche["textes_ecran"] or []) < 2:
+            pbs_fiche.append("« textes_ecran » doit contenir au moins 2 temps")
+        pbs.extend(f"fiche {i + 1} : {pb}" for pb in pbs_fiche)
     return pbs
 
 
@@ -369,7 +378,7 @@ def transcrire_whisper(chemin_video, cle_openai, duree_s):
 # ----------------------------------------------------------------------
 # Étages 3-5 — appels Gemini
 # ----------------------------------------------------------------------
-def comprehension_video(gemini, modele, fichier_video, duree_s, transcript_deja_fait, oui):
+def comprehension_video(gemini, modele, chemin_video, duree_s, transcript_deja_fait, oui):
     prompt = prompts.PROMPT_COMPREHENSION
     if transcript_deja_fait:
         prompt += "\n\nLe transcript n'est PAS demandé : mets \"transcript\": null."
@@ -380,16 +389,29 @@ def comprehension_video(gemini, modele, fichier_video, duree_s, transcript_deja_
                    "les langues d'origine (darija/français/anglais tels quels).")
         tokens_sortie = 3000
     tokens_entree = int(duree_s * TOKENS_VIDEO_PAR_S) + len(prompt) // 4
+    # Confirmation AVANT tout envoi : la vidéo n'est téléversée qu'après accord.
     confirmer_cout(duree_s, tokens_entree, tokens_sortie,
                    "compréhension vidéo (étage 3)", oui)
+    fichier_video = avec_retry(lambda: gemini.televerser_video(chemin_video),
+                               "Téléversement Gemini")
+    try:
+        def generer_texte(correctif):
+            contenu = prompt + (correctif or "")
+            return avec_retry(lambda: gemini.generer(modele, [fichier_video, contenu],
+                                                     temperature=0.2),
+                              "Compréhension vidéo (Gemini)")
 
-    def generer_texte(correctif):
-        contenu = prompt + (correctif or "")
-        return avec_retry(lambda: gemini.generer(modele, [fichier_video, contenu],
-                                                 temperature=0.2),
-                          "Compréhension vidéo (Gemini)")
-
-    return appel_json(generer_texte, valider_comprehension, "Étage 3")
+        objet = appel_json(generer_texte,
+                           valider_comprehension(not transcript_deja_fait),
+                           "Étage 3")
+    finally:
+        gemini.supprimer_fichier(fichier_video)
+    transcript = objet.get("transcript")
+    if isinstance(transcript, list):  # certains modèles renvoient des segments
+        objet["transcript"] = " ".join(
+            str(x.get("texte", x.get("text", ""))) if isinstance(x, dict) else str(x)
+            for x in transcript).strip()
+    return objet
 
 
 def appel_texte_json(gemini, modele, prompt_complet, valider, nom, duree_s,
@@ -412,6 +434,18 @@ def slug(texte):
     t = unicodedata.normalize("NFKD", texte).encode("ascii", "ignore").decode()
     t = re.sub(r"[^a-zA-Z0-9]+", "-", t).strip("-").lower()
     return t or "pays"
+
+
+def premier_pays_cible(profil):
+    brut = profil.get("pays_cibles")
+    if isinstance(brut, str):
+        brut = [brut]
+    candidats = [p.strip() for p in (brut or [])
+                 if isinstance(p, str) and p.strip()]
+    if candidats:
+        return candidats[0]
+    pays = profil.get("pays")
+    return pays.strip() if isinstance(pays, str) and pays.strip() else "Maroc"
 
 
 def profil_culturel(gemini, modele, pays, duree_s, oui):
@@ -504,6 +538,16 @@ def main():
         profil = json.loads(chemin_profil.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
         erreur_fatale(f"profil.json invalide : {e}")
+    problemes_profil = problemes_dict(profil, SCHEMA_PROFIL)
+    if problemes_profil:
+        erreur_fatale("le profil créateur ne respecte pas le schéma attendu ("
+                      + " ; ".join(problemes_profil) + "). Voir l'exemple "
+                      "fourni : moteur/profil.json.")
+    if not (0 <= args.crop_top < 1 and 0 <= args.crop_bottom < 1
+            and args.crop_top + args.crop_bottom <= 0.9):
+        erreur_fatale("valeurs --crop-top/--crop-bottom invalides : chacune "
+                      "entre 0 et 1, somme ≤ 0.9 (ex. 0.12 et 0.15 pour une "
+                      "capture TikTok, 0 et 0 pour une vidéo brute).")
 
     try:
         meta = metadonnees(str(chemin_video))
@@ -543,23 +587,22 @@ def main():
     elif not meta["a_de_l_audio"]:
         print("  La vidéo n'a pas de piste audio → transcription ignorée.")
     else:
-        transcription = transcrire_whisper(chemin_video, cle_openai, duree_s)
-        print(f"  ✓ {len(transcription['segments'])} segment(s), "
-              f"langue détectée : {transcription['langue_detectee'] or '?'} "
-              "(texte conservé tel quel, darija non « corrigée »).")
+        try:
+            transcription = transcrire_whisper(chemin_video, cle_openai, duree_s)
+            print(f"  ✓ {len(transcription['segments'])} segment(s), "
+                  f"langue détectée : {transcription['langue_detectee'] or '?'} "
+                  "(texte conservé tel quel, darija non « corrigée »).")
+        except RuntimeError as e:
+            print(f"  ⚠ {e} — le transcript sera demandé à Gemini (étage 3).")
+            transcription = None
 
     # ---- Étage 3 — Compréhension vidéo (Gemini) -----------------------
     etage(3, "Compréhension vidéo (Gemini)")
     gemini = Gemini(cle_google)
-    fichier_gemini = avec_retry(lambda: gemini.televerser_video(chemin_video),
-                                "Téléversement Gemini")
-    try:
-        comprehension = comprehension_video(
-            gemini, modele_video, fichier_gemini, duree_s,
-            transcript_deja_fait=transcription is not None, oui=args.oui)
-    finally:
-        gemini.supprimer_fichier(fichier_gemini)
-    print(f"  ✓ Résumé : {str(comprehension.get('resume', ''))[:100]}…")
+    comprehension = comprehension_video(
+        gemini, modele_video, chemin_video, duree_s,
+        transcript_deja_fait=transcription is not None, oui=args.oui)
+    print(f"  ✓ Résumé : {str(comprehension.get('resume') or '(pas de résumé)')[:100]}…")
 
     chemin_transcript = dossier_sortie / "transcript.txt"
     ecrire_transcript(chemin_transcript, transcription, comprehension)
@@ -585,7 +628,7 @@ def main():
     # ---- Étage 5 — Le Générateur --------------------------------------
     etage(5, "Générateur — " + ("diagnostic (mode A)" if args.mode == "ma-video"
                                 else "5 fiches idées (mode B)"))
-    pays_cible = (profil.get("pays_cibles") or [profil.get("pays") or "Maroc"])[0]
+    pays_cible = premier_pays_cible(profil)
     culture = profil_culturel(gemini, modele_texte, pays_cible, duree_s, args.oui)
 
     if args.mode == "ma-video":

@@ -225,7 +225,8 @@ def generer_rapport_html(rapport, chemin_png, chemin_html):
     generation = rapport.get("generation") or {}
     comprehension = rapport.get("comprehension") or {}
     ingestion = rapport.get("ingestion") or {}
-    langues = ", ".join(comprehension.get("langues_detectees") or []) or "—"
+    langues = ", ".join(str(x) for x in (comprehension.get("langues_detectees") or [])
+                        if x) or "—"
 
     if mode == "ma-video":
         corps_generation = _section_verdict(generation) + _section_actions(generation)
