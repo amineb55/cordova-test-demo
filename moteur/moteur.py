@@ -22,6 +22,7 @@ Sorties (dossier sorties/<nom-video>/) :
 """
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -54,10 +55,17 @@ MODELE_WHISPER = "whisper-1"
 
 # Estimation de coût (tarifs standard gemini-3.6-flash, août 2026, USD
 # par million de tokens). La vidéo consomme ~263 tokens/s (visuel) +
-# ~32 tokens/s (audio) en résolution média par défaut.
+# ~32 tokens/s (audio) en résolution média par défaut. Les tokens de
+# réflexion (thinking) sont facturés au tarif de sortie.
 PRIX_ENTREE_PAR_M = 1.50
 PRIX_SORTIE_PAR_M = 7.50
 TOKENS_VIDEO_PAR_S = 300
+
+# Plafond de réflexion (thinking budget) appliqué à chaque appel Gemini.
+# 0 = réflexion désactivée, -1 = automatique (le modèle décide).
+# Remplaçable via GEMINI_THINKING_BUDGET dans .env.
+THINKING_BUDGET_DEFAUT = 2048
+REFLEXION_AUTO_ESTIMEE = 4096  # estimation affichée quand le budget est -1
 
 
 # ----------------------------------------------------------------------
@@ -102,14 +110,30 @@ def avec_retry(fonction, nom):
             erreur_fatale(f"{nom} : {traduire_erreur_api(e2)}")
 
 
-def confirmer_cout(duree_video_s, tokens_entree, tokens_sortie, description, oui):
-    """Avant chaque appel Gemini : durée de la vidéo + coût estimé (brief §3)."""
-    cout = (tokens_entree * PRIX_ENTREE_PAR_M + tokens_sortie * PRIX_SORTIE_PAR_M) / 1e6
+def fmt_tokens(n):
+    return f"{int(n):,}".replace(",", " ")  # séparateur de milliers français
+
+
+def confirmer_cout(duree_video_s, tokens_entree, tokens_sortie,
+                   budget_reflexion, description, oui):
+    """Avant chaque appel Gemini : durée de la vidéo + coût estimé (brief §3),
+    tokens de réflexion (thinking) compris — facturés comme de la sortie."""
+    if budget_reflexion == 0:
+        reflexion, note_reflexion = 0, "réflexion désactivée"
+    elif budget_reflexion < 0:
+        reflexion = REFLEXION_AUTO_ESTIMEE
+        note_reflexion = f"≈{fmt_tokens(reflexion)} de réflexion (budget automatique)"
+    else:
+        reflexion = budget_reflexion
+        note_reflexion = f"≈{fmt_tokens(reflexion)} de réflexion (plafond)"
+    cout = (tokens_entree * PRIX_ENTREE_PAR_M
+            + (tokens_sortie + reflexion) * PRIX_SORTIE_PAR_M) / 1e6
     print(f"  Appel Gemini : {description}")
     print(f"  Durée de la vidéo : {duree_video_s:.1f} s")
     print(f"  Coût estimé : ~{cout:.4f} $ "
-          f"(≈{int(tokens_entree):,} tokens en entrée, ≈{int(tokens_sortie):,} en sortie) "
-          f"— estimation non calibrée".replace(",", " "))
+          f"(≈{fmt_tokens(tokens_entree)} tokens en entrée, "
+          f"≈{fmt_tokens(tokens_sortie)} en sortie, {note_reflexion}) "
+          "— estimation non calibrée")
     if oui:
         return
     if not sys.stdin.isatty():
@@ -258,7 +282,7 @@ def appel_json(generer_texte, valider, nom):
 # Client Gemini
 # ----------------------------------------------------------------------
 class Gemini:
-    def __init__(self, cle_api):
+    def __init__(self, cle_api, thinking_budget=THINKING_BUDGET_DEFAUT):
         try:
             from google import genai
             from google.genai import types
@@ -266,6 +290,7 @@ class Gemini:
             erreur_fatale("le paquet « google-genai » n'est pas installé. "
                           "Lancez : pip install -r requirements.txt")
         self._types = types
+        self.thinking_budget = thinking_budget
         self.client = genai.Client(api_key=cle_api)
 
     def televerser_video(self, chemin):
@@ -283,7 +308,9 @@ class Gemini:
 
     def generer(self, modele, contenus, temperature=0.4):
         config = self._types.GenerateContentConfig(
-            response_mime_type="application/json", temperature=temperature)
+            response_mime_type="application/json", temperature=temperature,
+            thinking_config=self._types.ThinkingConfig(
+                thinking_budget=self.thinking_budget))
         reponse = self.client.models.generate_content(
             model=modele, contents=contenus, config=config)
         return reponse.text
@@ -390,7 +417,7 @@ def comprehension_video(gemini, modele, chemin_video, duree_s, transcript_deja_f
         tokens_sortie = 3000
     tokens_entree = int(duree_s * TOKENS_VIDEO_PAR_S) + len(prompt) // 4
     # Confirmation AVANT tout envoi : la vidéo n'est téléversée qu'après accord.
-    confirmer_cout(duree_s, tokens_entree, tokens_sortie,
+    confirmer_cout(duree_s, tokens_entree, tokens_sortie, gemini.thinking_budget,
                    "compréhension vidéo (étage 3)", oui)
     fichier_video = avec_retry(lambda: gemini.televerser_video(chemin_video),
                                "Téléversement Gemini")
@@ -417,7 +444,8 @@ def comprehension_video(gemini, modele, chemin_video, duree_s, transcript_deja_f
 def appel_texte_json(gemini, modele, prompt_complet, valider, nom, duree_s,
                      tokens_sortie, description, oui, temperature=0.6):
     tokens_entree = len(prompt_complet) // 4
-    confirmer_cout(duree_s, tokens_entree, tokens_sortie, description, oui)
+    confirmer_cout(duree_s, tokens_entree, tokens_sortie, gemini.thinking_budget,
+                   description, oui)
 
     def generer_texte(correctif):
         contenu = prompt_complet + (correctif or "")
@@ -433,7 +461,11 @@ def appel_texte_json(gemini, modele, prompt_complet, valider, nom, duree_s,
 def slug(texte):
     t = unicodedata.normalize("NFKD", texte).encode("ascii", "ignore").decode()
     t = re.sub(r"[^a-zA-Z0-9]+", "-", t).strip("-").lower()
-    return t or "pays"
+    if not t:
+        # nom entièrement non latin (ex. « المغرب ») : hachage pour éviter
+        # que deux pays différents partagent le même fichier de cache
+        t = "pays-" + hashlib.sha1(texte.encode("utf-8")).hexdigest()[:8]
+    return t
 
 
 def premier_pays_cible(profil):
@@ -527,6 +559,17 @@ def main():
     cle_openai = (os.environ.get("OPENAI_API_KEY") or "").strip()
     modele_video = (os.environ.get("GEMINI_MODELE_VIDEO") or MODELE_VIDEO_DEFAUT).strip()
     modele_texte = (os.environ.get("GEMINI_MODELE_TEXTE") or MODELE_TEXTE_DEFAUT).strip()
+    brut_budget = (os.environ.get("GEMINI_THINKING_BUDGET") or "").strip()
+    thinking_budget = THINKING_BUDGET_DEFAUT
+    if brut_budget:
+        try:
+            thinking_budget = int(brut_budget)
+        except ValueError:
+            thinking_budget = None
+        if thinking_budget is None or thinking_budget < -1:
+            erreur_fatale("GEMINI_THINKING_BUDGET invalide : entier attendu — "
+                          "-1 (automatique), 0 (réflexion désactivée) ou un "
+                          "plafond de tokens (ex. 2048).")
 
     chemin_video = Path(args.video)
     if not chemin_video.exists():
@@ -598,7 +641,7 @@ def main():
 
     # ---- Étage 3 — Compréhension vidéo (Gemini) -----------------------
     etage(3, "Compréhension vidéo (Gemini)")
-    gemini = Gemini(cle_google)
+    gemini = Gemini(cle_google, thinking_budget)
     comprehension = comprehension_video(
         gemini, modele_video, chemin_video, duree_s,
         transcript_deja_fait=transcription is not None, oui=args.oui)
@@ -622,8 +665,8 @@ def main():
     formule = appel_texte_json(gemini, modele_texte, prompt_decodeur,
                                valider_formule, "Étage 4", duree_s, 1500,
                                "décodage de la formule (étage 4)", args.oui)
-    print(f"  ✓ Format : {formule.get('format', '?')} | "
-          f"déclencheur : {formule.get('declencheur_emotionnel', '?')}")
+    print(f"  ✓ Format : {formule.get('format') or '?'} | "
+          f"déclencheur : {formule.get('declencheur_emotionnel') or '?'}")
 
     # ---- Étage 5 — Le Générateur --------------------------------------
     etage(5, "Générateur — " + ("diagnostic (mode A)" if args.mode == "ma-video"

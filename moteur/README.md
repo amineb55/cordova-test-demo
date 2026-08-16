@@ -40,6 +40,9 @@ Modèles utilisés (vérifiés dans la documentation officielle, août 2026) :
 `gemini-3.6-flash` (famille Flash la plus récente, accepte la vidéo) et
 `whisper-1` (seul modèle OpenAI avec timestamps segment/mot). Ils se
 remplacent via `GEMINI_MODELE_VIDEO` / `GEMINI_MODELE_TEXTE` dans `.env`.
+La réflexion (thinking) de Gemini est plafonnée à 2048 tokens par appel,
+réglable via `GEMINI_THINKING_BUDGET` (`-1` automatique, `0` désactivée) ;
+ces tokens sont comptés dans l'estimation de coût affichée.
 
 ## Usage — 3 exemples
 
