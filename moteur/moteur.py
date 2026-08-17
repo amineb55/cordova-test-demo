@@ -291,6 +291,8 @@ class Gemini:
                           "Lancez : pip install -r requirements.txt")
         self._types = types
         self.thinking_budget = thinking_budget
+        # consommation réelle (usage_metadata) cumulée sur tous les appels
+        self.conso = {"entree": 0, "sortie": 0, "reflexion": 0, "appels": 0}
         self.client = genai.Client(api_key=cle_api)
 
     def televerser_video(self, chemin):
@@ -313,7 +315,18 @@ class Gemini:
                 thinking_budget=self.thinking_budget))
         reponse = self.client.models.generate_content(
             model=modele, contents=contenus, config=config)
+        usage = getattr(reponse, "usage_metadata", None)
+        if usage:
+            self.conso["entree"] += usage.prompt_token_count or 0
+            self.conso["sortie"] += usage.candidates_token_count or 0
+            self.conso["reflexion"] += usage.thoughts_token_count or 0
+            self.conso["appels"] += 1
         return reponse.text
+
+    def cout_reel_usd(self):
+        return (self.conso["entree"] * PRIX_ENTREE_PAR_M
+                + (self.conso["sortie"] + self.conso["reflexion"])
+                * PRIX_SORTIE_PAR_M) / 1e6
 
     def supprimer_fichier(self, fichier):
         try:
@@ -717,6 +730,8 @@ def main():
         "comprehension": comprehension,
         "formule": formule,
         "generation": generation,
+        "consommation_gemini": {**gemini.conso,
+                                "cout_usd_aux_tarifs_publies": round(gemini.cout_reel_usd(), 4)},
     }
     chemin_json = dossier_sortie / "rapport.json"
     chemin_json.write_text(json.dumps(rapport, ensure_ascii=False, indent=1),
@@ -728,6 +743,11 @@ def main():
     for f in ("rapport.html", "rapport.json", "timeline_attention.png",
               "transcript.txt"):
         print(f"   {dossier_sortie / f}")
+    c = gemini.conso
+    print(f"\nConsommation Gemini réelle ({c['appels']} appels) : "
+          f"{fmt_tokens(c['entree'])} tokens entrée, {fmt_tokens(c['sortie'])} sortie, "
+          f"{fmt_tokens(c['reflexion'])} réflexion — "
+          f"coût ≈ {gemini.cout_reel_usd():.4f} $ aux tarifs publiés.")
 
 
 if __name__ == "__main__":
