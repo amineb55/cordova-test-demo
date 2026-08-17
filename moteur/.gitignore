@@ -8,3 +8,4 @@ sorties/*
 !sorties/.gitkeep
 data/cultures/*
 !data/cultures/.gitkeep
+coach_session.json

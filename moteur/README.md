@@ -106,6 +106,31 @@ traitée et consommation incluses).
 - Sous-titres arabes/darija (RTL) : installer la police Noto Sans
   Arabic — `sudo apt install fonts-noto-core` (Debian/Ubuntu).
 
+## Coach IA — l'assistant conversationnel
+
+`coach.py` est un chat terminal qui pilote les moteurs comme des outils
+(fiches idées, lecture des rapports, recherche YouTube, documentation,
+analyses et découpes avec estimation + confirmation systématiques) :
+
+```bash
+python coach.py --profil profil.json
+```
+
+Commandes dans le chat : `/creer` (« What should I create? » — une fiche
+recommandée + 2 alternatives), `/analyser <fichier> [mode]`,
+`/decouper <fichier> [nb]`, `/rapports`, `/cout`, `/quitter` — tout le
+reste est de la conversation libre, en darija, arabe ou français.
+
+- `YOUTUBE_API_KEY` (optionnelle, `.env`) active la recherche de vraies
+  vidéos ; sans elle le Coach dit « recherche indisponible » et
+  n'invente **aucun** lien.
+- `COACH_BUDGET_SESSION` (défaut 0,20 $) : au-delà, le Coach demande
+  confirmation avant de continuer. Compteur affiché après chaque tour.
+- Avant toute découpe, le Coach pose la question des droits ; sans
+  droits, il propose l'alternative légitime (créer SA version du sujet).
+- L'historique vit dans `coach_session.json` (20 derniers tours envoyés
+  au modèle).
+
 ## Notes
 
 - Toutes les évaluations affichées sont des **estimations non calibrées**.
