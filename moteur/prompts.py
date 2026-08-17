@@ -102,3 +102,53 @@ Réponds UNIQUEMENT en JSON valide, schéma :
 Règles : factuel et nuancé, pas de stéréotypes ; si un point varie selon
 les régions ou les générations, le préciser ; aucune statistique
 inventée ; le calendrier inclut ramadan et les fêtes si pertinent."""
+
+# ----------------------------------------------------------------------
+# Moteur Découpe V1 (brief §5) — vidéo longue → shorts
+# ----------------------------------------------------------------------
+
+PROMPT_SELECTION = """Tu es monteur senior spécialisé en formats courts. Voici le transcript
+horodaté complet d'une vidéo longue et ses signaux techniques (pics
+d'énergie, zones plates). Propose 12 à 20 moments découpables en shorts.
+Réponds UNIQUEMENT en JSON : liste d'objets :
+{
+ "de_s": 0.0, "a_s": 0.0,           // bornes sur frontières de phrases
+ "titre_travail": "...",
+ "type": "histoire|punchline|conseil|revelation|reaction|demonstration",
+ "resume": "...",
+ "autonome": true,                   // compréhensible seul, début accrocheur, fin qui conclut
+ "raison": "..."                     // pourquoi ce moment peut tenir seul
+}
+Règles : durée cible {duree_min}-{duree_max} s ; ne jamais couper au
+milieu d'une phrase ou d'une idée ; privilégier les moments avec un
+début fort dans les 3 premières secondes ; aucun moment inventé — chaque
+candidat cite ses bornes réelles du transcript."""
+
+PROMPT_SCORING = """Tu es stratège de contenu court. Note chaque moment candidat de 0 à 100
+selon : force des 3 premières secondes (30 %), autonomie narrative (25 %),
+émotion/énergie (20 %), densité d'information (15 %), adéquation de durée
+(10 %). Ajuste selon le profil créateur et le profil culturel fournis.
+Réponds UNIQUEMENT en JSON : liste {"index": 0, "score": 0,
+"justification": "...", "risque": "..."} — score honnête, pas de complaisance ;
+signale tout moment qui nécessiterait le contexte de la vidéo complète."""
+
+PROMPT_HABILLAGE = """Tu es directeur créatif. Pour ce short (transcript de l'extrait + son
+type + le profil créateur + le profil culturel), produis UNIQUEMENT ce
+JSON :
+{
+ "titre": "...",
+ "hook_texte_ecran": "...",         // ≤ 8 mots, langue du transcript
+ "caption": "...",
+ "hashtags": ["...", "..."],        // 5-8, larges + niche
+ "cta": "..."
+}
+Règles : langue du transcript (darija naturelle si darija) ; respecter le
+profil culturel ; aucune promesse chiffrée ; pas de hashtags spam."""
+
+PROMPT_TRANSCRIPTION_AUDIO = """Transcris intégralement cet enregistrement audio. Conserve la langue
+telle quelle : darija en darija, mélanges darija/français/anglais tels
+quels, jamais de « correction » vers l'arabe classique. Réponds
+UNIQUEMENT en JSON valide : une liste de segments :
+[{"de_s": 0.0, "a_s": 0.0, "texte": "..."}]
+Règles : segments courts (une phrase ou un souffle), horodatages en
+secondes fidèles à l'audio, n'invente rien, n'omets rien."""

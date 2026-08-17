@@ -80,6 +80,32 @@ Décrit le créateur (niches, langues, pays cible, matériel, style) — voir
 l'exemple fourni. Au premier usage d'un pays cible, un profil culturel est
 généré par LLM et mis en cache dans `data/cultures/<pays>.json`.
 
+## Moteur Découpe — vidéo longue → shorts
+
+`decoupe.py` prend une vidéo longue (jusqu'à 90 min) et produit N shorts
+9:16 sous-titrés, habillés et classés par potentiel :
+
+```bash
+python decoupe.py longue.mp4 --profil profil.json --nb-shorts 8 --oui
+# --duree-short 15-60        bornes de durée des shorts (s)
+# --sous-titres auto|off     incrustation mot à mot (défaut auto)
+# --recadrage visage|centre|flou   (défaut visage, repli centre automatique)
+```
+
+Sorties dans `sorties/<nom>/shorts/` : `short_01.mp4` … (classés par
+score décroissant), `rapport_decoupe.html`, `decoupe.json` (durée
+traitée et consommation incluses).
+
+- `OPENAI_API_KEY` **fortement recommandée** : les sous-titres mot à mot
+  exigent les timestamps par mot de Whisper (~0,006 $/min). Sans elle,
+  repli automatique : transcription Gemini (audio seul) par segments,
+  sous-titres moins précis (avertissement affiché).
+- La vidéo longue n'est **jamais** envoyée entière à Gemini — la
+  sélection se fait sur le transcript (texte, quasi gratuit). Ordre de
+  grandeur pour 1 h : 0,50-0,90 $.
+- Sous-titres arabes/darija (RTL) : installer la police Noto Sans
+  Arabic — `sudo apt install fonts-noto-core` (Debian/Ubuntu).
+
 ## Notes
 
 - Toutes les évaluations affichées sont des **estimations non calibrées**.

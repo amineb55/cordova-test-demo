@@ -12,6 +12,69 @@ from pathlib import Path
 
 MENTION = "estimation non calibrée"
 
+# Charte graphique commune (rapport moteur + rapport découpe)
+STYLE_SOMBRE = """
+ :root { color-scheme: dark; }
+ * { box-sizing: border-box; }
+ body { margin: 0; padding: 16px; background: #0f1220; color: #e8eaf6;
+        font: 16px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif; }
+ main { max-width: 720px; margin: 0 auto; }
+ h1 { font-size: 1.35rem; margin: 0 0 2px; color: #ffffff; }
+ h2 { font-size: 1.15rem; margin: 0 0 12px; color: #5ee6a8;
+      text-transform: uppercase; letter-spacing: .06em; }
+ .h2-inline { display: inline; }
+ h3 { font-size: 1rem; color: #aab0d0; margin: 18px 0 8px; }
+ h4 { font-size: .9rem; color: #aab0d0; margin: 12px 0 6px; }
+ p { margin: 6px 0; }
+ section { background: #171b30; border: 1px solid #2a2f4d;
+           border-radius: 14px; padding: 18px; margin: 14px 0; }
+ .sous-titre { color: #aab0d0; margin: 0 0 4px; }
+ .meta { color: #8890b5; font-size: .85rem; }
+ .verdict { font-size: 1.3rem; font-weight: 700; padding: 12px 16px;
+            border-radius: 10px; display: inline-block; }
+ .verdict.vert { background: #123726; color: #5ee6a8; }
+ .verdict.orange { background: #3a2b12; color: #ffc46b; }
+ .verdict.rouge { background: #3a1519; color: #ff8a8a; }
+ .badge { font-size: .75rem; font-weight: 700; padding: 3px 8px;
+          border-radius: 6px; letter-spacing: .04em; }
+ .badge.rouge { background: #3a1519; color: #ff8a8a; }
+ .badge.orange { background: #3a2b12; color: #ffc46b; }
+ .carte { background: #10142a; border: 1px solid #2a2f4d;
+          border-radius: 10px; padding: 14px; margin: 10px 0; }
+ .entete-action { display: flex; gap: 10px; align-items: center;
+                  margin-bottom: 6px; }
+ .action-titre { font-weight: 600; color: #ffffff; }
+ .preuve { color: #aab0d0; font-size: .92rem; }
+ .ts { color: #7aa8ff; font-variant-numeric: tabular-nums;
+       font-size: .88rem; white-space: nowrap; }
+ .ecran { display: flex; gap: 12px; padding: 6px 0;
+          border-bottom: 1px dashed #2a2f4d; }
+ .ecran-texte { flex: 1; }
+ .cta { font-weight: 600; color: #5ee6a8; }
+ .fiche-num { color: #7aa8ff; font-size: .8rem; font-weight: 700;
+              letter-spacing: .08em; text-transform: uppercase; }
+ .titre-hook { font-size: 1.25rem; color: #ffffff; margin: 4px 0 10px; }
+ .script { white-space: pre-wrap; }
+ .alerte { background: #3a2b12; color: #ffc46b; padding: 8px 12px;
+           border-radius: 8px; }
+ .mention { color: #8890b5; font-size: .78rem; font-style: italic; }
+ .vide { color: #8890b5; }
+ img { max-width: 100%; border-radius: 10px; display: block; }
+ .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+ .chip { background: #10142a; border: 1px solid #2a2f4d; padding: 5px 10px;
+         border-radius: 999px; font-size: .82rem; color: #aab0d0; }
+ .defilement { overflow-x: auto; }
+ table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+ th, td { text-align: left; padding: 8px 10px;
+          border-bottom: 1px solid #2a2f4d; vertical-align: top; }
+ th { color: #aab0d0; }
+ .acte { text-transform: uppercase; color: #5ee6a8; font-size: .8rem;
+         font-weight: 700; }
+ details > summary { cursor: pointer; }
+ ul { margin: 6px 0; padding-left: 22px; }
+ li { margin: 4px 0; }
+"""
+
 
 def e(valeur):
     """Échappe tout contenu venant des modèles avant insertion HTML."""
@@ -241,67 +304,7 @@ def generer_rapport_html(rapport, chemin_png, chemin_html):
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rapport — {e(rapport.get('video'))}</title>
-<style>
- :root {{ color-scheme: dark; }}
- * {{ box-sizing: border-box; }}
- body {{ margin: 0; padding: 16px; background: #0f1220; color: #e8eaf6;
-        font: 16px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif; }}
- main {{ max-width: 720px; margin: 0 auto; }}
- h1 {{ font-size: 1.35rem; margin: 0 0 2px; color: #ffffff; }}
- h2 {{ font-size: 1.15rem; margin: 0 0 12px; color: #5ee6a8;
-      text-transform: uppercase; letter-spacing: .06em; }}
- .h2-inline {{ display: inline; }}
- h3 {{ font-size: 1rem; color: #aab0d0; margin: 18px 0 8px; }}
- h4 {{ font-size: .9rem; color: #aab0d0; margin: 12px 0 6px; }}
- p {{ margin: 6px 0; }}
- section {{ background: #171b30; border: 1px solid #2a2f4d;
-           border-radius: 14px; padding: 18px; margin: 14px 0; }}
- .sous-titre {{ color: #aab0d0; margin: 0 0 4px; }}
- .meta {{ color: #8890b5; font-size: .85rem; }}
- .verdict {{ font-size: 1.3rem; font-weight: 700; padding: 12px 16px;
-            border-radius: 10px; display: inline-block; }}
- .verdict.vert {{ background: #123726; color: #5ee6a8; }}
- .verdict.orange {{ background: #3a2b12; color: #ffc46b; }}
- .verdict.rouge {{ background: #3a1519; color: #ff8a8a; }}
- .badge {{ font-size: .75rem; font-weight: 700; padding: 3px 8px;
-          border-radius: 6px; letter-spacing: .04em; }}
- .badge.rouge {{ background: #3a1519; color: #ff8a8a; }}
- .badge.orange {{ background: #3a2b12; color: #ffc46b; }}
- .carte {{ background: #10142a; border: 1px solid #2a2f4d;
-          border-radius: 10px; padding: 14px; margin: 10px 0; }}
- .entete-action {{ display: flex; gap: 10px; align-items: center;
-                  margin-bottom: 6px; }}
- .action-titre {{ font-weight: 600; color: #ffffff; }}
- .preuve {{ color: #aab0d0; font-size: .92rem; }}
- .ts {{ color: #7aa8ff; font-variant-numeric: tabular-nums;
-       font-size: .88rem; white-space: nowrap; }}
- .ecran {{ display: flex; gap: 12px; padding: 6px 0;
-          border-bottom: 1px dashed #2a2f4d; }}
- .ecran-texte {{ flex: 1; }}
- .cta {{ font-weight: 600; color: #5ee6a8; }}
- .fiche-num {{ color: #7aa8ff; font-size: .8rem; font-weight: 700;
-              letter-spacing: .08em; text-transform: uppercase; }}
- .titre-hook {{ font-size: 1.25rem; color: #ffffff; margin: 4px 0 10px; }}
- .script {{ white-space: pre-wrap; }}
- .alerte {{ background: #3a2b12; color: #ffc46b; padding: 8px 12px;
-           border-radius: 8px; }}
- .mention {{ color: #8890b5; font-size: .78rem; font-style: italic; }}
- .vide {{ color: #8890b5; }}
- img {{ max-width: 100%; border-radius: 10px; display: block; }}
- .chips {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }}
- .chip {{ background: #10142a; border: 1px solid #2a2f4d; padding: 5px 10px;
-         border-radius: 999px; font-size: .82rem; color: #aab0d0; }}
- .defilement {{ overflow-x: auto; }}
- table {{ border-collapse: collapse; width: 100%; font-size: .92rem; }}
- th, td {{ text-align: left; padding: 8px 10px;
-          border-bottom: 1px solid #2a2f4d; vertical-align: top; }}
- th {{ color: #aab0d0; }}
- .acte {{ text-transform: uppercase; color: #5ee6a8; font-size: .8rem;
-         font-weight: 700; }}
- details > summary {{ cursor: pointer; }}
- ul {{ margin: 6px 0; padding-left: 22px; }}
- li {{ margin: 4px 0; }}
-</style>
+<style>{STYLE_SOMBRE}</style>
 </head>
 <body>
 <main>
