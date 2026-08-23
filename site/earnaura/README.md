@@ -36,7 +36,22 @@ Projet : import du dépôt GitHub `amineb55/cordova-test-demo`.
 |---|---|
 | Root Directory | `site/earnaura` |
 | Production Branch | `claude/new-session-p5cdog` (branche de travail — sera `main` une fois la PR mergée) |
-| Framework | Next.js (auto-détecté) |
+| Framework Preset | **Next.js** — forcé par `vercel.json` |
+| Output Directory | laisser vide (défaut du framework) |
+
+Le `vercel.json` à la racine de ce dossier force `"framework": "nextjs"`, car
+les réglages d'un fichier de configuration ont priorité sur ceux du tableau
+de bord.
+
+**Deuxième piège rencontré** : avec un Framework Preset sur « Other », le
+déploiement réussit quand même (Vercel lance `npm run build`, donc `.next/`
+est bien produit et le statut passe à *Ready*), mais Vercel ignore la sortie
+de Next et sert uniquement `public/` comme dossier statique. Symptôme
+caractéristique : `/health.txt` s'affiche, alors que **toutes** les pages de
+l'application renvoient un `404: NOT_FOUND` de la plateforme — page blanche
+Vercel, et non la page 404 de Next.js. Un 404 Vercel sur toutes les routes
+alors qu'un fichier statique passe signifie donc « framework non détecté »,
+jamais « erreur de routage applicatif ».
 
 **Piège rencontré une fois** : Vercel n'associe pas un déploiement à une
 branche « à la demande » — chaque déploiement se construit depuis la
