@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Earnaura — site web
 
-## Getting Started
+Landing Next.js (App Router) + Tailwind v4 pour Earnaura, la plateforme
+construite autour des trois moteurs du dossier `moteur/` (`moteur.py`,
+`decoupe.py`, `coach.py`). Voir `../../moteur/PRODUIT.md` pour le produit
+et `BRIEF_SITE_WEB_EARNAURA.md` (fourni séparément) pour la spec complète
+du MVP.
 
-First, run the development server:
+## Développement local
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Ouvrir [http://localhost:3000](http://localhost:3000) — redirige vers
+`/fr` ou `/en` selon la langue du navigateur.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `src/app/[locale]/` — pages par langue (`layout.tsx`, `page.tsx` la
+  landing, `app/page.tsx` la page d'attente de l'application)
+- `src/i18n/` — `config.ts` (locales, direction RTL par langue),
+  `dictionnaires.ts` (tout le texte, FR + EN)
+- `src/components/` — composants partagés (ex. `Tarifs.tsx`, bascule de
+  zone de prix Maghreb/International)
+- `src/middleware.ts` — redirection `/` → `/fr` ou `/en`
 
-## Learn More
+## Déploiement (Vercel)
 
-To learn more about Next.js, take a look at the following resources:
+Projet : import du dépôt GitHub `amineb55/cordova-test-demo`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**Réglages obligatoires** (Settings → Git / General) :
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Réglage | Valeur |
+|---|---|
+| Root Directory | `site/earnaura` |
+| Production Branch | `claude/new-session-p5cdog` (branche de travail — sera `main` une fois la PR mergée) |
+| Framework | Next.js (auto-détecté) |
 
-## Deploy on Vercel
+**Piège rencontré une fois** : Vercel n'associe pas un déploiement à une
+branche « à la demande » — chaque déploiement se construit depuis la
+branche et le commit qui étaient configurés **au moment où il a été
+lancé**. Si vous changez le Root Directory ou la Production Branch
+*après* un premier déploiement raté, le bouton **Redéployer** rejoue
+l'ancienne configuration (ancienne branche, ancien commit) — il ne relit
+pas les nouveaux réglages. Après tout changement de branche ou de
+répertoire racine, il faut soit pousser un nouveau commit sur la bonne
+branche, soit lancer un déploiement neuf (pas un « redeploy » d'un
+déploiement existant) pour que les nouveaux réglages soient pris en
+compte.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Ce dépôt vit sur `claude/new-session-p5cdog` tant que la PR n'est pas
+mergée — `site/earnaura` n'existe pas sur `main`.
