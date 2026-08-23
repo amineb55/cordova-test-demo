@@ -1,0 +1,8 @@
+**/__pycache__/
+**/*.pyc
+**/.env
+moteur/sorties/
+moteur/data/cultures/*.json
+site/
+www/
+.git/

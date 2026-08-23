@@ -2,10 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { estLocale } from "@/i18n/config";
 import { dictionnaire } from "@/i18n/dictionnaires";
+import Analyse from "@/components/Analyse";
 
-// Tranche A : page d'attente honnête — le parcours upload → analyse →
-// rapport ouvre avec la tranche B.
-export default async function Apercu({
+// Tranche B — parcours réel : upload → analyse (mode A/B) → rapport.
+// Mode fondateur : un seul accès, ni comptes ni paiement (tranche C).
+export default async function PageAnalyse({
   params,
 }: {
   params: Promise<{ locale: string }>;
@@ -15,18 +16,22 @@ export default async function Apercu({
   const d = dictionnaire(locale);
 
   return (
-    <main className="mx-auto flex max-w-2xl flex-col items-center px-4 py-28 text-center">
-      <span className="rounded-full bg-ambre-fonce px-3 py-1 text-xs font-bold uppercase tracking-widest text-ambre">
-        {d.apercu.badge}
-      </span>
-      <h1 className="mt-6 text-3xl font-extrabold">{d.apercu.titre}</h1>
-      <p className="mt-4 text-sourdine">{d.apercu.texte}</p>
-      <Link
-        href={`/${locale}`}
-        className="mt-8 rounded-full border border-bord px-6 py-2.5 font-semibold text-sourdine hover:border-faible hover:text-encre"
-      >
-        {d.apercu.retour}
-      </Link>
+    <main className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
+      <div className="mb-8 text-center">
+        <span className="rounded-full bg-ambre-fonce px-3 py-1 text-xs font-bold uppercase tracking-widest text-ambre">
+          {d.analyse.badge}
+        </span>
+        <h1 className="mt-4 text-3xl font-extrabold">{d.analyse.titre}</h1>
+        <p className="mt-2 text-sourdine">{d.analyse.sousTitre}</p>
+      </div>
+
+      <Analyse d={d} locale={locale} />
+
+      <p className="mt-10 text-center">
+        <Link href={`/${locale}`} className="text-sm text-faible hover:text-encre">
+          {d.apercu.retour}
+        </Link>
+      </p>
     </main>
   );
 }
