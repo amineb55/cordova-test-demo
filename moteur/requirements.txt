@@ -1,0 +1,9 @@
+google-genai>=1.0
+openai>=1.40
+python-dotenv>=1.0
+# <5 : reference_ingestion.py utilise cv2.CascadeClassifier (API Haar),
+# retirée d'OpenCV 5 — le module fourni est testé sur la famille 4.x.
+opencv-python-headless>=4.9,<5
+numpy>=1.26
+scipy>=1.11
+matplotlib>=3.8

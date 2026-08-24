@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.mp4
+*.MP4
+*.mov
+*.pyc
+sorties/*
+!sorties/.gitkeep
+data/cultures/*
+!data/cultures/.gitkeep
+coach_session.json
