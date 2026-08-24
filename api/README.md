@@ -32,6 +32,16 @@ export GOOGLE_API_KEY=...
 python -m uvicorn api.main:app --port 8080     # depuis la racine du dépôt
 ```
 
+## Où vit le Dockerfile
+
+À la **racine du dépôt**, pas dans `api/`. `gcloud run deploy --source .`
+ne cherche un Dockerfile qu'à la racine du contexte de build ; sans lui, il
+bascule sur les Buildpacks, qui détectent le `package.json` Cordova de la
+racine et construisent une application Node.js. Le build réussit alors,
+mais le conteneur n'écoute sur aucun port et Cloud Run échoue avec
+« failed to start and listen on the port defined by the PORT environment
+variable ».
+
 ## Déploiement sur Cloud Run
 
 Depuis **[Google Cloud Shell](https://shell.cloud.google.com)** (aucune
